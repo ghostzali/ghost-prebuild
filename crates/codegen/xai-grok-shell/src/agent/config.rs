@@ -5816,6 +5816,29 @@ reasoning_effort = "low"
         let creds = resolve_credentials(&model, None);
         assert_eq!(creds.auth_type, xai_chat_state::AuthType::ApiKey);
     }
+    /// Override wins: api_key_override > model.own_credential() > session_key > XAI_API_KEY.
+    #[test]
+    #[serial]
+    fn resolve_credentials_with_override_wins_over_model_key() {
+        use xai_chat_state::AuthType;
+        use xai_grok_test_support::EnvGuard;
+        let _xai_guard = EnvGuard::unset(crate::agent::auth_method::XAI_API_KEY_ENV_VAR);
+        let model = test_model_entry(
+            "m",
+            "https://inference.example/v1",
+            Some("model-key"),
+            None,
+            None,
+        );
+        // Without override: model-level key wins.
+        let creds = resolve_credentials(&model, None);
+        assert_eq!(creds.auth_type, AuthType::ApiKey);
+        assert_eq!(creds.api_key.as_deref(), Some("model-key"));
+        // With override: CLI key wins over model key.
+        let creds = resolve_credentials_with_override(&model, None, Some("cli-override-key"));
+        assert_eq!(creds.auth_type, AuthType::ApiKey);
+        assert_eq!(creds.api_key.as_deref(), Some("cli-override-key"));
+    }
     fn api_key_creds(base_url: &str) -> ResolvedCredentials {
         ResolvedCredentials {
             api_key: Some("xai-secret".to_string()),

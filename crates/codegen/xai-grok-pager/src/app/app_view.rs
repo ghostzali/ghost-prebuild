@@ -851,11 +851,11 @@ pub struct AppView {
     /// `AgentSession.deferred_model_switch` so the model is applied once
     /// the session is created.
     pub cli_model_override: Option<acp::ModelId>,
-    /// CLI provider override (`--provider`). Passed through to shell config
-    /// resolution so the correct provider's API key and base URL are used.
+    /// CLI provider override (`--provider`). Captured from CLI; not yet
+    /// threaded into provider-level model catalog lookup (see P1.3).
     pub cli_provider: Option<String>,
-    /// CLI API key override (`--api-key`). Injected as the api_key in
-    /// `ResolvedCredentials`, overriding all other credential sources.
+    /// CLI API key override (`--api-key`). Captured from CLI; not yet
+    /// injected into credential resolution (see P1.2 wiring).
     pub cli_api_key: Option<String>,
     /// CLI effort token (`--reasoning-effort` / `--effort`). Applied on session create.
     pub cli_effort_token: Option<String>,
