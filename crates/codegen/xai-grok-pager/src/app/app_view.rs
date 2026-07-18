@@ -851,6 +851,12 @@ pub struct AppView {
     /// `AgentSession.deferred_model_switch` so the model is applied once
     /// the session is created.
     pub cli_model_override: Option<acp::ModelId>,
+    /// CLI provider override (`--provider`). Captured from CLI; not yet
+    /// threaded into provider-level model catalog lookup (see P1.3).
+    pub cli_provider: Option<String>,
+    /// CLI API key override (`--api-key`). Captured from CLI; not yet
+    /// injected into credential resolution (see P1.2 wiring).
+    pub cli_api_key: Option<String>,
     /// CLI effort token (`--reasoning-effort` / `--effort`). Applied on session create.
     pub cli_effort_token: Option<String>,
     /// Default YOLO for new sessions, seeded at startup from `effective_yolo_for_launch`.
@@ -1263,6 +1269,8 @@ impl AppView {
             welcome_tick: 0,
             welcome_shimmer_frame: 0,
             cli_model_override: None,
+            cli_provider: None,
+            cli_api_key: None,
             cli_effort_token: None,
             default_yolo: false,
             permission_mode_from_soft_default: true,
@@ -5169,6 +5177,8 @@ pub(crate) mod tests {
             tips: Vec::new(),
             tip: None,
             cli_model_override: None,
+            cli_provider: None,
+            cli_api_key: None,
             cli_effort_token: None,
             default_yolo: false,
             permission_mode_from_soft_default: true,

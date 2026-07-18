@@ -594,6 +594,8 @@ pub(crate) async fn run(
         .model
         .as_deref()
         .map(agent_client_protocol::ModelId::new);
+    app.cli_provider = args.provider.clone();
+    app.cli_api_key = args.api_key.clone();
     app.cli_effort_token = args.reasoning_effort.clone();
     app.auth_use_oauth = args.oauth;
     app.show_resolved_model = remote_settings

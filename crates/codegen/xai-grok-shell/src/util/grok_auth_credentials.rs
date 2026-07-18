@@ -59,6 +59,7 @@ impl GrokAuthCredentials {
             user_token,
             deployment_key: None,
             alpha_test_key: None,
+            api_key: None,
             auth_manager: None,
         }
     }

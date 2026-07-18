@@ -4303,8 +4303,24 @@ pub(crate) fn first_own_credential(
 ///
 /// When `env_key` lists multiple names, the first set non-empty value is used.
 pub fn resolve_credentials(model: &ModelEntry, session_key: Option<&str>) -> ResolvedCredentials {
+    resolve_credentials_with_override(model, session_key, None)
+}
+
+/// Resolve credentials with an explicit API key override.
+/// Priority: api_key_override > model api_key/env_key > session token > XAI_API_KEY.
+pub fn resolve_credentials_with_override(
+    model: &ModelEntry,
+    session_key: Option<&str>,
+    api_key_override: Option<&str>,
+) -> ResolvedCredentials {
     let info = model.info();
-    let (api_key, base_url, auth_type) = if let Some(key) = model.own_credential() {
+    let (api_key, base_url, auth_type) = if let Some(key) = api_key_override {
+        (
+            Some(key.to_owned()),
+            info.base_url.clone(),
+            xai_chat_state::AuthType::ApiKey,
+        )
+    } else if let Some(key) = model.own_credential() {
         (
             Some(key),
             info.base_url.clone(),
@@ -4704,10 +4720,26 @@ pub fn resolve_model_to_sampling_config(
     client_version: Option<String>,
     fallback_entry: Option<ModelEntry>,
 ) -> Option<SamplerConfig> {
+    resolve_model_to_sampling_config_with_override(
+        model_id, models, session_key, alpha_test_key, client_version, fallback_entry, None,
+    )
+}
+
+/// Like [`resolve_model_to_sampling_config`] but with an explicit API key override
+/// (e.g. from `--api-key` CLI flag).
+pub fn resolve_model_to_sampling_config_with_override(
+    model_id: &str,
+    models: &IndexMap<String, ModelEntry>,
+    session_key: Option<&str>,
+    alpha_test_key: Option<String>,
+    client_version: Option<String>,
+    fallback_entry: Option<ModelEntry>,
+    api_key_override: Option<&str>,
+) -> Option<SamplerConfig> {
     let entry = find_model_by_id(models, model_id)
         .cloned()
         .or(fallback_entry)?;
-    let credentials = resolve_credentials(&entry, session_key);
+    let credentials = resolve_credentials_with_override(&entry, session_key, api_key_override);
     Some(sampling_config_for_model(
         &entry,
         credentials,
@@ -5783,6 +5815,29 @@ reasoning_effort = "low"
         let model = test_model_entry("m", "https://example.com/v1", None, None, None);
         let creds = resolve_credentials(&model, None);
         assert_eq!(creds.auth_type, xai_chat_state::AuthType::ApiKey);
+    }
+    /// Override wins: api_key_override > model.own_credential() > session_key > XAI_API_KEY.
+    #[test]
+    #[serial]
+    fn resolve_credentials_with_override_wins_over_model_key() {
+        use xai_chat_state::AuthType;
+        use xai_grok_test_support::EnvGuard;
+        let _xai_guard = EnvGuard::unset(crate::agent::auth_method::XAI_API_KEY_ENV_VAR);
+        let model = test_model_entry(
+            "m",
+            "https://inference.example/v1",
+            Some("model-key"),
+            None,
+            None,
+        );
+        // Without override: model-level key wins.
+        let creds = resolve_credentials(&model, None);
+        assert_eq!(creds.auth_type, AuthType::ApiKey);
+        assert_eq!(creds.api_key.as_deref(), Some("model-key"));
+        // With override: CLI key wins over model key.
+        let creds = resolve_credentials_with_override(&model, None, Some("cli-override-key"));
+        assert_eq!(creds.auth_type, AuthType::ApiKey);
+        assert_eq!(creds.api_key.as_deref(), Some("cli-override-key"));
     }
     fn api_key_creds(base_url: &str) -> ResolvedCredentials {
         ResolvedCredentials {
