@@ -260,6 +260,12 @@ pub struct AgentArgs {
     /// Model ID to use
     #[arg(short = 'm', long = "model", value_name = "MODEL")]
     pub model: Option<String>,
+    /// Provider to use (openai, anthropic, openai-codex, etc.)
+    #[arg(long = "provider", value_name = "PROVIDER")]
+    pub provider: Option<String>,
+    /// API key override for the selected provider
+    #[arg(long = "api-key", value_name = "KEY")]
+    pub api_key: Option<String>,
     /// Reasoning effort for reasoning models
     #[clap(
         long = "reasoning-effort",
