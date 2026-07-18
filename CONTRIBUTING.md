@@ -1,19 +1,20 @@
-# Contributing
+# Contributing to Ghost Prebuild
 
-This repository does **not** accept external pull requests or unsolicited
-patches.
+Ghost Prebuild is a fork of the Grok Build open-source project by xAI, rebranded and extended
+for multi-provider compatibility.
 
-SpaceXAI develops this software internally. The public tree is published for
-source transparency and local builds under the terms of the Apache License,
-Version 2.0 (see [`LICENSE`](LICENSE)).
+## How to contribute
 
-## Security reports
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Ensure tests pass: `cargo test -p <crate>`
+5. Open a pull request
 
-Please report security issues through the process described in
-[`SECURITY.md`](SECURITY.md). Do not open a public issue for vulnerabilities.
+## Development
 
-## Licensing of this source
+See the [README](README.md#development) for build instructions.
 
-By downloading or using this source, you agree that your use is governed by
-the Apache License, Version 2.0. No contributor license agreement is offered
-because external contributions are not accepted.
+## License
+
+Apache 2.0 — see [LICENSE](LICENSE).

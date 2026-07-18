@@ -1,0 +1,80 @@
+name: CI — PR Build & Test
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-and-test:
+    name: Check + Test (self-hosted)
+    runs-on: self-hosted
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust toolchain
+        run: |
+          # Ensure cargo/rustup are on PATH for this and all subsequent steps
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup default stable 2>/dev/null || true
+          rustup show
+          cargo --version
+          rustc --version
+
+      - name: Install build prerequisites
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo install dotslash --version 0.5.7
+          if ! which protoc >/dev/null 2>&1; then
+            echo "::warning::protoc not found — install protobuf-compiler (apt-get install protobuf-compiler) on the runner"
+          else
+            protoc --version
+          fi
+
+      - name: Cache cargo registry
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build check (modified crates)
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo check \
+            -p xai-grok-config-types \
+            -p xai-grok-models \
+            -p xai-grok-auth \
+            -p xai-grok-version \
+            -p xai-grok-http \
+            -p xai-grok-config
+
+      - name: Test (modified crates)
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo test \
+            -p xai-grok-config-types \
+            -p xai-grok-models \
+            -p xai-grok-auth \
+            -p xai-grok-version
+
+      - name: Clippy (modified crates)
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo clippy \
+            -p xai-grok-config-types \
+            -p xai-grok-models \
+            -p xai-grok-auth \
+            -p xai-grok-version \
+            -p xai-grok-http \
+            -- -D warnings

@@ -1,21 +1,25 @@
 use reqwest::RequestBuilder;
 use std::sync::Arc;
-/// Credentials for authenticating with grok backend services.
+/// Credentials for authenticating with ghost backend services.
 ///
-/// Two construction modes:
+/// Three construction modes:
 /// - `with_auth_manager(am)` — live mode. `resolve_async()` drives
 ///   `AuthManager::get_valid_token()` (memory -> disk -> OIDC refresh).
 /// - `new(token)` — static mode. For one-shot callers that don't have
 ///   an `AuthManager` (visibility checks, bundle fetches, tests).
+/// - `with_api_key(key)` — API-key mode for OpenAI-compatible providers.
 ///
 /// Deployment key (enterprise) sends bare `Bearer`, routed to management key auth.
-/// User token (xAI users) sends `Bearer` + `X-XAI-Token-Auth: xai-grok-cli`.
+/// User token (OAuth) sends `Bearer` + `X-XAI-Token-Auth: xai-grok-cli`.
+/// API key (openai-compatible providers) sends bare `Bearer`.
 /// Deployment key takes precedence when both are present.
 #[derive(Clone)]
 pub struct GrokAuthCredentials {
     pub user_token: Option<String>,
     pub deployment_key: Option<String>,
     pub alpha_test_key: Option<String>,
+    /// API key for OpenAI-compatible providers (bare Bearer, no X-XAI-Token-Auth).
+    pub api_key: Option<String>,
     /// Live auth source. When set, `resolve_async()` drives the full
     /// refresh chain; `resolve()` reads the in-memory cache.
     auth_manager: Option<Arc<crate::auth::AuthManager>>,
@@ -32,9 +36,15 @@ impl std::fmt::Debug for GrokAuthCredentials {
                 &self.deployment_key.as_ref().map(|_| "<redacted>"),
             )
             .field(
+                "api_key",
+                &self.api_key.as_ref().map(|_| "<redacted>"),
+            )
+            .field(
                 "mode",
                 &if self.auth_manager.is_some() {
                     "live"
+                } else if self.api_key.is_some() {
+                    "api_key"
                 } else {
                     "static"
                 },
@@ -59,6 +69,16 @@ impl GrokAuthCredentials {
         self.auth_manager = Some(am);
         self
     }
+    /// Static credentials from an API key for OpenAI-compatible providers.
+    pub fn with_api_key(api_key: String) -> Self {
+        Self {
+            user_token: None,
+            deployment_key: None,
+            alpha_test_key: None,
+            api_key: Some(api_key),
+            auth_manager: None,
+        }
+    }
     /// Return a reference to the internal `AuthManager`, if any.
     pub fn auth_manager(&self) -> Option<&Arc<crate::auth::AuthManager>> {
         self.auth_manager.as_ref()
@@ -66,9 +86,11 @@ impl GrokAuthCredentials {
     /// Error hint for 401 responses, based on which credential was sent.
     pub fn auth_error_hint(&self) -> &'static str {
         if self.deployment_key.is_some() {
-            "Your GROK_DEPLOYMENT_KEY is invalid or expired. Please contact a team admin."
+            "Your GHOST_DEPLOYMENT_KEY is invalid or expired. Please contact a team admin."
+        } else if self.api_key.is_some() {
+            "Your API key is invalid or expired. Check your provider configuration."
         } else if self.user_token.is_some() {
-            "Your auth token is invalid or expired. Run `grok login` to re-authenticate."
+            "Your auth token is invalid or expired. Run `ghost login` to re-authenticate."
         } else {
             "Not authenticated."
         }
@@ -119,6 +141,9 @@ impl GrokAuthCredentials {
     pub fn apply(&self, builder: RequestBuilder, base_url: &str) -> RequestBuilder {
         let builder = if let Some(ref key) = self.deployment_key {
             builder.header("Authorization", format!("Bearer {}", key))
+        } else if let Some(ref key) = self.api_key {
+            // API key mode (OpenAI-compatible): bare Bearer, no X-XAI-Token-Auth
+            builder.header("Authorization", format!("Bearer {}", key))
         } else if let Some(ref token) = self.user_token {
             builder
                 .header("Authorization", format!("Bearer {}", token))
@@ -131,6 +156,12 @@ impl GrokAuthCredentials {
         };
         let _ = base_url;
         builder
+    }
+
+    /// Check if we're in API key mode (OpenAI-compatible provider).
+    /// Matches `apply()` priority: api_key is used when deployment_key is absent.
+    pub fn is_api_key_mode(&self) -> bool {
+        self.api_key.is_some() && self.deployment_key.is_none()
     }
 }
 impl xai_grok_auth::HttpAuth for GrokAuthCredentials {
