@@ -3,7 +3,7 @@
 **Branch**: `feat/pi-inspired-multi-provider`  
 **Objective**: Replicate Pi agent's provider/auth architecture — dual auth modes (OAuth subscription + API key), multiple models per provider, runtime provider switching, credential store with refresh.
 
-**Reference implementation**: [earendil-works/pi](https://github.com/earendil-works/pi) — `packages/ai/src/`
+**Reference implementation**: [earendil-works/pi-mono](https://github.com/earendil-works/pi-mono) — `packages/ai/src/`
 
 ---
 
@@ -16,7 +16,7 @@ Pi has a clean two-arm auth design per provider:
 | Arm | Use case | Interface |
 |-----|----------|-----------|
 | `ApiKeyAuth` | API keys (env vars, stored key, ambient files) | `name`, `login?()`, `check?()`, `resolve()` |
-| `OAuthAuth` | Subscription/OAuth (ChatGPT Plus, Claude Pro, GitHub Copilot) | `name`, `login()`, `refresh()`, `toAuth()` |
+| `OAuthAuth` | Subscription/OAuth (ChatGPT Plus, Claude Pro, GitHub Copilot) | `name`, `loginLabel?`, `login()`, `refresh()`, `toAuth()` |
 
 Both arms are combined into `ProviderAuth { apiKey?, oauth? }` — a provider can support one or both modes. Anthropic (Claude) is the canonical dual-auth provider: `ANTHROPIC_API_KEY` OR `ANTHROPIC_OAUTH_TOKEN` from env, plus OAuth for Claude Pro/Max.
 
@@ -91,16 +91,18 @@ Providers can have:
 | P0.1 | Map the sampler → HTTP client path | Trace from `xai-grok-sampler` through `xai-grok-shell` to understand where API key, base URL, and model ID meet the HTTP request. Document the data flow. |
 | P0.2 | Map config loading | Trace from `xai-grok-config` → `config.toml` → CLI flags to understand where `ProviderRegistry` should be injected. |
 | P0.3 | Audit existing auth credentials | `GrokAuthCredentials::with_api_key()` already exists — trace where it's called and how credentials flow into the sampler. |
-| P0.4 | Identify all `GROK_*` env var readers | `grep -r "GROK_" crates/` to catalog all env var references for Phase 3 migration. |
+| P0.4 | Identify all `GROK_*` env var readers | `grep -r "GROK_" crates/` to catalog all env var references for Phase 5 migration. |
 | P0.5 | Define the `config.toml` schema | Design the TOML format for provider configuration, mirroring pi's provider lists + credential separation. |
 
 ### Phase 1: Wire Provider Switching (Core Integration)
+
+**⚠️ Migration note (before Phase 2):** PR #1 shipped `ProviderAuthMode` as a mutually-exclusive enum (`ApiKey | Codex`). To support dual-auth providers (Anthropic with both API key + OAuth), the config schema must migrate from `auth_mode: Option<ProviderAuthMode>` to a dual-arm `ProviderAuth { api_key: Option<...>, oauth: Option<...> }` **before** Phase 2 OAuth lands. Without this migration, Anthropic dual-auth is unreachable. A `[providers.anthropic]` that wants both modes requires two config arms, not a single enum variant.
 
 **Goal**: A `--provider` CLI flag routes to the correct API base + API key.
 
 | ID | Task | Priority | Detail |
 |----|------|----------|--------|
-| P1.1 | Add `--provider` CLI flag to `PagerArgs` | 🔴 Critical | In `xai-grok-pager/src/app.rs`. Default: read from config or env. Should override any model/provider selection. |
+| P1.1 | Add `--provider` CLI flag to `PagerArgs` | 🔴 Critical | In `xai-grok-pager/src/app/cli.rs` (line 430). Default: read from config or env. Should override any model/provider selection. |
 | P1.2 | Load `ProviderRegistry` from `config.toml` | 🔴 Critical | In `xai-grok-config` config loader. Parse `[providers]` section. Fall back to embedded catalog for defaults. |
 | P1.3 | Wire provider into sampler HTTP client | 🔴 Critical | In `xai-grok-sampler`: select the right `api_base` URL from the active provider. Construct HTTP client headers with resolved API key. |
 | P1.4 | Route API key into auth credentials | 🔴 Critical | `GrokAuthCredentials::from_provider(&provider)` — calls `resolve_api_key()` and constructs credentials. |
@@ -198,7 +200,12 @@ Tracked as **[P3.6]** above. The `auth_mode: Option<String>` field on `EmbeddedP
 
 ---
 
-## Config Schema Target (Phase 0.5)
+## Config Schema Target (matches shipped code from PR #1)
+
+The `ProviderRegistry` deserializes from `[[providers]]` **array-of-tables** format.
+The `ProviderAuthMode` enum has only `ApiKey | Codex` variants. OAuth is not yet implemented;
+when Phase 2 adds it, the schema will migrate to a dual-arm `ProviderAuth` struct (see
+Phase 1 migration note above).
 
 ```toml
 # ~/.ghost/config.toml
@@ -207,22 +214,32 @@ Tracked as **[P3.6]** above. The `auth_mode: Option<String>` field on `EmbeddedP
 default_provider = "openai"
 
 # Configured providers override or extend the embedded catalog
-[providers.openai]
+# Uses [[providers]] array-of-tables syntax (matches shipped ProviderRegistry)
+
+[[providers]]
+name = "openai"
 auth_mode = "api_key"
 env_key = "OPENAI_API_KEY"
 # api_base = "https://api.openai.com/v1"  # defaults from catalog
 
-[providers.openai-codex]
+[[providers]]
+name = "openai-codex"
 auth_mode = "codex"
 # API key from ~/.codex/auth.json (automatic)
 
-[providers.custom-llm]
+[[providers]]
+name = "custom-llm"
 auth_mode = "api_key"
 api_key = "sk-..."
 api_base = "https://llm.mycompany.com/v1"
 models = ["my-model-7b", "my-model-70b"]
 
-[providers.anthropic]
-auth_mode = "oauth"
-# Uses OAuth flow: gh login anthropic --oauth
+# Illustrative Phase 2 target — not yet supported by the shipped schema:
+# [[providers]]
+# name = "anthropic"
+# # Would need dual-arm ProviderAuth (api_key + oauth) — see Phase 1 migration note
+# # Currently:
+# #   auth_mode = "api_key"   → works (ANTHROPIC_API_KEY env)
+# #   auth_mode = "oauth"     → not yet implemented (deserialization error)
+# # Uses browser/device-code OAuth flow: ghost login anthropic --oauth
 ```
