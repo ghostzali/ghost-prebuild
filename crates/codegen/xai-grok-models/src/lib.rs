@@ -3,6 +3,8 @@
 //!
 //! At runtime each model is resolved via:
 //!   CLI flag > ENV var > config.toml > remote settings > these defaults
+//!
+//! Also exposes the embedded provider catalog for multi-provider setup.
 
 use std::sync::LazyLock;
 
@@ -20,12 +22,33 @@ struct DefaultModels {
     image_description: Option<String>,
     /// Falls back to `default` if not specified in JSON.
     session_summary: Option<String>,
+    #[serde(default)]
+    providers: Vec<EmbeddedProvider>,
     models: Vec<DefaultModelEntry>,
 }
 
 #[derive(serde::Deserialize)]
 struct DefaultModelEntry {
     model: String,
+}
+
+/// Embedded provider catalog entry from default_models.json.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct EmbeddedProvider {
+    pub name: String,
+    pub api_base: Option<String>,
+    pub env_key: Option<String>,
+    pub auth_mode: Option<String>,
+    pub models: Vec<EmbeddedModelEntry>,
+}
+
+/// Embedded model entry within a provider.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct EmbeddedModelEntry {
+    pub model: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub context_window: Option<u64>,
 }
 
 static DEFAULTS: LazyLock<DefaultModels> = LazyLock::new(|| {
@@ -67,4 +90,14 @@ pub fn default_session_summary_model() -> &'static str {
         .session_summary
         .as_deref()
         .unwrap_or(&DEFAULTS.default)
+}
+
+/// All embedded providers from default_models.json.
+pub fn embedded_providers() -> &'static [EmbeddedProvider] {
+    &DEFAULTS.providers
+}
+
+/// Find an embedded provider by name.
+pub fn find_embedded_provider(name: &str) -> Option<&EmbeddedProvider> {
+    DEFAULTS.providers.iter().find(|p| p.name == name)
 }

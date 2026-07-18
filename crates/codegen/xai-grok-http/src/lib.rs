@@ -178,7 +178,7 @@ pub fn process_user_agent_string() -> String {
 
     UserAgent {
         origin,
-        agent_product: "grok-shell",
+        agent_product: "ghost-shell",
         agent_version,
         platform: PlatformInfo::current(),
     }
@@ -188,7 +188,7 @@ pub fn process_user_agent_string() -> String {
 pub fn session_user_agent_string(origin: &OriginClientInfo) -> String {
     UserAgent {
         origin: origin.clone(),
-        agent_product: "grok-shell",
+        agent_product: "ghost-shell",
         agent_version: agent_version(),
         platform: PlatformInfo::current(),
     }
@@ -236,9 +236,11 @@ pub fn client_type_from_origin(origin: Option<&OriginClientInfo>) -> ClientType 
     ClientType::from_client_identifier(origin.map(|o| o.product.as_str()))
 }
 
-/// Process-level client identifier (`GROK_CLIENT_NAME` env var, default `"grok-shell"`).
+/// Process-level client identifier (`GHOST_CLIENT_NAME` or `GROK_CLIENT_NAME` env var, default `"ghost-shell"`).
 pub fn process_client_identifier() -> String {
-    std::env::var("GROK_CLIENT_NAME").unwrap_or_else(|_| "grok-shell".to_string())
+    std::env::var("GHOST_CLIENT_NAME")
+        .or_else(|_| std::env::var("GROK_CLIENT_NAME"))
+        .unwrap_or_else(|_| "ghost-shell".to_string())
 }
 
 /// Header telling cli-chat-proxy whether this process is a single-prompt

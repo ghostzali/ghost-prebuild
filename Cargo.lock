@@ -13096,6 +13096,7 @@ dependencies = [
  "indexmap",
  "serde",
  "serde_json",
+ "serial_test",
  "strum 0.27.2",
  "tracing",
  "xai-grok-announcements",

@@ -2,11 +2,17 @@
 
 use semver::Version;
 
-pub const TEST_VERSION_ENV: &str = "GROK_TEST_VERSION";
+pub const TEST_VERSION_ENV: &str = "GHOST_TEST_VERSION";
 
-pub const VERSION: &str = match option_env!("GROK_VERSION") {
-    Some(v) => v,
-    None => env!("CARGO_PKG_VERSION"),
+/// Fallback: GHOST_VERSION > GROK_VERSION > CARGO_PKG_VERSION
+pub const VERSION: &str = {
+    if let Some(v) = option_env!("GHOST_VERSION") {
+        v
+    } else if let Some(v) = option_env!("GROK_VERSION") {
+        v
+    } else {
+        env!("CARGO_PKG_VERSION")
+    }
 };
 
 /// [`TEST_VERSION_ENV`] override first, then [`VERSION`]. Trimmed so

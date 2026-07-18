@@ -1,14 +1,116 @@
 {
-  "default": "grok-build",
-  "web_search": "grok-4.20-multi-agent",
-  "image_description": "grok-build",
-  "session_summary": "grok-build",
+  "default": "ghost-prebuild",
+  "web_search": "ghost-prebuild",
+  "image_description": "ghost-prebuild",
+  "session_summary": "ghost-prebuild",
+  "providers": [
+    {
+      "name": "openai",
+      "api_base": "https://api.openai.com/v1",
+      "env_key": "OPENAI_API_KEY",
+      "models": [
+        {
+          "model": "gpt-4o",
+          "name": "GPT-4o",
+          "description": "Best general-purpose model for coding tasks",
+          "context_window": 128000,
+          "temperature": 0.7,
+          "top_p": 0.95,
+          "api_backend": "responses"
+        },
+        {
+          "model": "gpt-4.1",
+          "name": "GPT-4.1",
+          "description": "Latest flagship model with improved coding",
+          "context_window": 1000000,
+          "temperature": 0.7,
+          "top_p": 0.95,
+          "api_backend": "responses"
+        },
+        {
+          "model": "o4-mini",
+          "name": "o4-mini",
+          "description": "Fast, cost-effective reasoning model",
+          "context_window": 200000,
+          "temperature": 1.0,
+          "top_p": 1.0,
+          "api_backend": "responses"
+        }
+      ]
+    },
+    {
+      "name": "xai",
+      "api_base": "https://api.x.ai/v1",
+      "env_key": "XAI_API_KEY",
+      "models": [
+        {
+          "model": "grok-4",
+          "name": "Grok 4",
+          "description": "Advanced reasoning and coding",
+          "context_window": 500000,
+          "temperature": 0.7,
+          "top_p": 0.95,
+          "api_backend": "responses"
+        }
+      ]
+    },
+    {
+      "name": "anthropic",
+      "api_base": "https://api.anthropic.com/v1",
+      "env_key": "ANTHROPIC_API_KEY",
+      "models": [
+        {
+          "model": "claude-sonnet-4-20250514",
+          "name": "Claude Sonnet 4",
+          "description": "Best balance of speed and capability",
+          "context_window": 200000,
+          "temperature": 0.7,
+          "top_p": 0.95,
+          "api_backend": "responses"
+        }
+      ]
+    },
+    {
+      "name": "codex",
+      "api_base": "https://api.openai.com/v1",
+      "auth_mode": "codex",
+      "models": [
+        {
+          "model": "gpt-5.6-sol",
+          "name": "GPT-5.6-Sol",
+          "description": "Latest frontier agentic coding model via Codex subscription",
+          "context_window": 200000,
+          "temperature": 0.7,
+          "top_p": 0.95,
+          "api_backend": "responses"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "name": "GPT-5.6-Luna",
+          "description": "Powerful coding model with high reasoning",
+          "context_window": 200000,
+          "temperature": 0.7,
+          "top_p": 0.95,
+          "api_backend": "responses"
+        },
+        {
+          "model": "gpt-4.1",
+          "name": "GPT-4.1",
+          "description": "Available via ChatGPT Plus/Pro subscriptions",
+          "context_window": 1000000,
+          "temperature": 0.7,
+          "top_p": 0.95,
+          "api_backend": "responses"
+        }
+      ]
+    }
+  ],
   "models": [
     {
-      "model": "grok-build",
-      "name": "Grok Build",
-      "description": "Best for advanced coding tasks",
-      "context_window": 500000,
+      "model": "ghost-prebuild",
+      "name": "Ghost Prebuild",
+      "description": "Default model — configured via provider settings",
+      "context_window": 200000,
       "temperature": 0.7,
       "top_p": 0.95,
       "api_backend": "responses",

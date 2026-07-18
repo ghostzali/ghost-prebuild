@@ -46,6 +46,7 @@ pub use managed_cache::{
     managed_config_identity_changed_at, managed_deployment_id, managed_policy_compromised_for,
     mark_managed_config_synced, mark_managed_config_synced_at, normalize_identity,
 };
+#[allow(deprecated)]
 pub use paths::{
     claude_managed_settings_path, claude_managed_settings_probe_path, decode_cwd_from_dirname,
     default_grok_home, encode_cwd_dirname, ensure_sessions_cwd_dir, grok_application,

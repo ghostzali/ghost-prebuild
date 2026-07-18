@@ -2,37 +2,33 @@
 
 <h1>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://media.x.ai/v1/website/spacexai-symbol-white-transparent-0c31957f.png">
-    <source media="(prefers-color-scheme: light)" srcset="https://media.x.ai/v1/website/spacexai-symbol-black-transparent-6435cf42.png">
-    <img alt="SpaceXAI logo" src="https://media.x.ai/v1/website/spacexai-symbol-black-transparent-6435cf42.png" width="96">
+    <!-- Logo assets coming soon — PRs welcome! -->
+    <img alt="Ghost Prebuild logo" width="96">
   </picture>
   <br>
-  Grok Build (<code>grok</code>)
+  Ghost Prebuild (<code>ghost</code>)
 </h1>
 
-**Grok Build** is SpaceXAI's terminal-based AI coding agent. It runs as a
-full-screen TUI that understands your codebase, edits files, executes shell
-commands, searches the web, and manages long-running tasks — interactively,
-headlessly for scripting/CI, or embedded in editors via the Agent Client
-Protocol (ACP).
+**Ghost Prebuild** is a terminal-based AI coding agent, forked from the open-source 
+Grok Build CLI. It runs as a full-screen TUI that understands your codebase, edits files, 
+executes shell commands, searches the web, and manages long-running tasks — interactively,
+headlessly for scripting/CI, or embedded in editors via the Agent Client Protocol (ACP).
+
+**Key differentiators from Grok Build:**
+- 🔌 **OpenAI-compatible API providers** — Works with any OpenAI-compatible endpoint 
+  (OpenAI, xAI, Anthropic, local Ollama, LiteLLM proxies, etc.)
+- 🔑 **Multiple auth profiles** — Configure multiple API keys and switch between them 
+  easily at runtime
+- 🎛️ **Provider-agnostic models** — Map any model from any provider with full 
+  context-window and parameter customization
 
 [Installing the released binary](#installing-the-released-binary) ·
 [Building from source](#building-from-source) ·
+[Multi-Provider Setup](#multi-provider-setup) ·
 [Documentation](#documentation) ·
 [Repository layout](#repository-layout) ·
 [Development](#development) ·
-[Contributing](#contributing) ·
 [License](#license)
-
-![Grok Build TUI](https://media.x.ai/v1/website/universe-tui-screenshot-6f7a0837.png)
-
-**Learn more about Grok Build at [x.ai/cli](https://x.ai/cli)**
-
-This repository contains the Rust source for the `grok` CLI/TUI and its agent
-runtime. It is synced periodically from the SpaceXAI monorepo.
-
-A small `SOURCE_REV` file at the root records the full monorepo commit SHA
-for the version of the code present in this tree.
 
 </div>
 
@@ -43,13 +39,10 @@ for the version of the code present in this tree.
 Prebuilt binaries are published for macOS, Linux, and Windows:
 
 ```sh
-curl -fsSL https://x.ai/cli/install.sh | bash   # macOS / Linux / Git Bash
-irm https://x.ai/cli/install.ps1 | iex          # Windows PowerShell
-grok --version
+# Install scripts coming soon — currently build from source
+# curl -fsSL https://ghost-prebuild.dev/install.sh | bash   # macOS / Linux
+# irm https://ghost-prebuild.dev/install.ps1 | iex          # Windows PowerShell
 ```
-
-See the [changelog](https://x.ai/build/changelog) for the latest fixes,
-features, and improvements in each release.
 
 ## Building from source
 
@@ -63,7 +56,6 @@ Requirements:
 
   ```sh
   cargo install dotslash
-  # or: prebuilt packages — https://dotslash-cli.com/docs/installation/
   /usr/bin/env dotslash --help   # sanity check
   ```
 
@@ -79,15 +71,89 @@ cargo check -p xai-grok-pager-bin            # fast validation
 ```
 
 The binary artifact is named `xai-grok-pager`; official installs ship it as
-`grok`. On first launch it opens your browser to authenticate — see the
-[authentication guide](crates/codegen/xai-grok-pager/docs/user-guide/02-authentication.md).
+`ghost`.
+
+## Multi-Provider Setup
+
+Ghost Prebuild supports multiple OpenAI-compatible API providers simultaneously. 
+Configure them in `~/.ghost/config.toml`:
+
+```toml
+# Default provider used when no --provider flag is given
+default_provider = "openai"
+
+[[providers]]
+name = "openai"
+api_base = "https://api.openai.com/v1"
+api_key = "${OPENAI_API_KEY}"          # resolved from env var
+models = ["gpt-4o", "gpt-4.1", "o4-mini", "o3-mini"]
+
+[[providers]]
+name = "xai"
+api_base = "https://api.x.ai/v1"
+api_key = "${XAI_API_KEY}"
+models = ["grok-4", "grok-4.1", "grok-3"]
+
+[[providers]]
+name = "anthropic"
+api_base = "https://api.anthropic.com/v1"  # or use a proxy like LiteLLM
+api_key = "${ANTHROPIC_API_KEY}"
+models = ["claude-sonnet-4-20250514", "claude-opus-4-20250514"]
+
+[[providers]]
+name = "local"
+api_base = "http://localhost:11434/v1"     # Ollama
+api_key = "ollama"                         # Ollama ignores the key
+models = ["llama3.3:70b", "qwen3:32b", "codestral:22b"]
+```
+
+**Codex subscription (zero-config):**
+If you already have [Codex CLI](https://github.com/openai/codex) installed and logged in,
+Ghost Prebuild auto-detects your ChatGPT subscription and makes it available as the `codex` provider.
+
+> **Note on token expiry**: Codex OAuth access tokens are short-lived (~1 hour). Ghost Prebuild
+> reads the token fresh from `~/.codex/auth.json` on each request; the Codex CLI background
+> process refreshes this file periodically. If you get 401 errors, run `codex login` to force
+> a token refresh, then restart ghost.
+
+```sh
+# No config needed — auto-detected from ~/.codex/auth.json
+ghost --provider codex --model gpt-5.6-sol
+```
+
+The `codex` provider reads your OAuth tokens from `~/.codex/auth.json` (the same
+file Codex uses), so there's no separate login step. Supported models include all
+the models your ChatGPT subscription grants access to.
+
+**Switching providers at runtime:**
+```sh
+ghost --provider openai                          # use OpenAI API key
+ghost --provider codex                           # use ChatGPT subscription
+ghost --provider xai --model grok-4              # use xAI's grok-4
+ghost --provider local --model codestral:22b     # use local Ollama model
+```
+
+**Environment variables:**
+```sh
+export GHOST_DEFAULT_PROVIDER="openai"
+export GHOST_PROVIDER_OPENAI_API_KEY="sk-..."
+export GHOST_PROVIDER_XAI_API_KEY="..."
+```
+
+Ghost Prebuild also maintains backward compatibility with the `GROK_*` and 
+`XAI_*` environment variables from Grok Build, but `GHOST_*` variables take 
+precedence.
+
+> **Note on model catalogs**: Models can be defined in two places — the embedded
+> `default_models.json` provider catalog (metadata-rich: name, description,
+> context_window) and the `config.toml` provider `models` list (simple IDs).
+> The config.toml `models` list acts as a **filter/override**: if set, only those
+> models are available from that provider, regardless of the embedded catalog.
+> If empty or unset, the embedded catalog is used as the full model list.
 
 ## Documentation
 
-Full online documentation is available at
-[docs.x.ai/build/overview](https://docs.x.ai/build/overview).
-
-The user guide ships with the pager crate:
+Documentation ships with the pager crate:
 [`crates/codegen/xai-grok-pager/docs/user-guide/`](crates/codegen/xai-grok-pager/docs/user-guide/)
 — getting started, keyboard shortcuts, slash commands, configuration, theming,
 MCP servers, skills, plugins, hooks, headless mode, sandboxing, and more.
@@ -103,7 +169,7 @@ MCP servers, skills, plugins, hooks, headless mode, sandboxing, and more.
 | `crates/codegen/xai-grok-workspace` | Host filesystem, VCS, execution, checkpoints |
 | `crates/codegen/...` | The rest of the CLI crate closure (config, MCP, markdown, sandbox, ...) |
 | `crates/common/`, `crates/build/`, `prod/mc/` | Small shared leaf crates pulled in by the closure |
-| `third_party/` | Vendored upstream source (Mermaid diagram stack) — see below |
+| `third_party/` | Vendored upstream source (Mermaid diagram stack) |
 
 > [!IMPORTANT]
 > The root `Cargo.toml` (workspace members, dependency versions, lints,
@@ -121,8 +187,8 @@ cargo fmt --all               # rustfmt.toml at the repo root
 
 ## Contributing
 
-> [!NOTE]
-> External contributions are not accepted. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Contributions are welcome! This is a fork of the Grok Build open-source project, 
+rebranded and extended for multi-provider compatibility.
 
 ## License
 
