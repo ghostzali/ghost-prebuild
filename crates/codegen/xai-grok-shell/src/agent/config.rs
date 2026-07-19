@@ -1275,6 +1275,9 @@ pub struct Config {
     /// `[auto_mode]` section: Auto permission-mode configuration. See [`AutoModeConfig`].
     #[serde(default)]
     pub auto_mode: AutoModeConfig,
+    /// `[[providers]]` array from config.toml.
+    #[serde(default)]
+    pub providers: xai_grok_config_types::ProviderRegistry,
     /// `[model.*]` overrides from config.toml. Resolve via `resolve_model_list()`.
     #[serde(skip)]
     pub config_models: IndexMap<String, ConfigModelOverride>,
@@ -1390,6 +1393,12 @@ pub struct Config {
     /// Defaults to reading from GROK_STORAGE_MODE env var.
     #[serde(skip)]
     pub storage_mode: StorageMode,
+    /// CLI override for the provider.
+    #[serde(skip)]
+    pub provider_override: Option<String>,
+    /// CLI override for the API key.
+    #[serde(skip)]
+    pub api_key_override: Option<String>,
     /// CLI override for the default model ID.
     #[serde(skip)]
     pub default_model_override: Option<String>,
@@ -1705,6 +1714,7 @@ impl Default for Config {
             goal: GoalConfig::default(),
             doom_loop_recovery: crate::util::config::DoomLoopRecoverySettings::default(),
             auto_mode: AutoModeConfig::default(),
+            providers: xai_grok_config_types::ProviderRegistry { providers: vec![], default_provider: None },
             config_models: IndexMap::new(),
             model_override_warnings: Vec::new(),
             grok_com_config: GrokComConfig::default(),
@@ -1748,6 +1758,8 @@ impl Default for Config {
             marketplace: MarketplaceConfig::default(),
             diagnostics: DiagnosticsConfig::default(),
             storage_mode: StorageMode::resolve(None, None),
+            provider_override: None,
+            api_key_override: None,
             default_model_override: None,
             reasoning_effort_override: None,
             web_search_model_override: None,
@@ -4303,7 +4315,7 @@ pub(crate) fn first_own_credential(
 ///
 /// When `env_key` lists multiple names, the first set non-empty value is used.
 pub fn resolve_credentials(model: &ModelEntry, session_key: Option<&str>) -> ResolvedCredentials {
-    resolve_credentials_with_override(model, session_key, None)
+    resolve_credentials_with_override(model, session_key, None, None, None)
 }
 
 /// Resolve credentials with an explicit API key override.
@@ -4312,32 +4324,49 @@ pub fn resolve_credentials_with_override(
     model: &ModelEntry,
     session_key: Option<&str>,
     api_key_override: Option<&str>,
+    provider_override: Option<&str>,
+    provider_registry: Option<&xai_grok_config_types::ProviderRegistry>,
 ) -> ResolvedCredentials {
     let info = model.info();
-    let (api_key, base_url, auth_type) = if let Some(key) = api_key_override {
+    let provider = provider_override
+        .zip(provider_registry)
+        .and_then(|(name, reg)| reg.providers.iter().find(|p| p.name == name));
+        
+    let base_url = provider
+        .and_then(|p| p.api_base.clone())
+        .unwrap_or_else(|| {
+            if api_key_override.is_none() && model.own_credential().is_none() && session_key.is_none() && crate::agent::auth_method::read_xai_api_key_env().is_ok() {
+                model.api_base_url.clone().unwrap_or_else(|| info.base_url.clone())
+            } else {
+                info.base_url.clone()
+            }
+        });
+
+    let (api_key, auth_type) = if let Some(key) = api_key_override {
         (
             Some(key.to_owned()),
-            info.base_url.clone(),
+            xai_chat_state::AuthType::ApiKey,
+        )
+    } else if let Some(key) = provider.and_then(|p| p.resolve_api_key()) {
+        (
+            Some(key),
             xai_chat_state::AuthType::ApiKey,
         )
     } else if let Some(key) = model.own_credential() {
         (
             Some(key),
-            info.base_url.clone(),
             xai_chat_state::AuthType::ApiKey,
         )
     } else if let Some(key) = session_key {
         (
             Some(key.to_owned()),
-            info.base_url.clone(),
             xai_chat_state::AuthType::SessionToken,
         )
     } else if let Ok(key) = crate::agent::auth_method::read_xai_api_key_env() {
-        let url = model
-            .api_base_url
-            .clone()
-            .unwrap_or_else(|| info.base_url.clone());
-        (Some(key), url, xai_chat_state::AuthType::ApiKey)
+        (
+            Some(key),
+            xai_chat_state::AuthType::ApiKey,
+        )
     } else {
         if let Some(ref env_keys) = model.env_key
             && !env_keys.is_empty()
@@ -4348,11 +4377,7 @@ pub fn resolve_credentials_with_override(
                  requests will have no API key",
             );
         }
-        (
-            None,
-            info.base_url.clone(),
-            xai_chat_state::AuthType::ApiKey,
-        )
+        (None, xai_chat_state::AuthType::ApiKey)
     };
     let auth_scheme = info.auth_scheme;
     tracing::debug!(
@@ -4396,8 +4421,17 @@ fn resolve_credentials_enforced(
     entry: &ModelEntry,
     session_key: Option<&str>,
     disable_api_key_auth: bool,
+    api_key_override: Option<&str>,
+    provider_override: Option<&str>,
+    provider_registry: Option<&xai_grok_config_types::ProviderRegistry>,
 ) -> ResolvedCredentials {
-    let mut credentials = resolve_credentials(entry, session_key);
+    let mut credentials = resolve_credentials_with_override(
+        entry,
+        session_key,
+        api_key_override,
+        provider_override,
+        provider_registry,
+    );
     enforce_disable_api_key_auth(&mut credentials, disable_api_key_auth, session_key);
     credentials
 }
@@ -4495,10 +4529,20 @@ pub fn resolve_aux_model_sampling_config(
     disable_api_key_auth: bool,
     alpha_test_key: Option<String>,
     client_version: Option<String>,
+    api_key_override: Option<&str>,
+    provider_override: Option<&str>,
+    provider_registry: Option<&xai_grok_config_types::ProviderRegistry>,
 ) -> Option<SamplerConfig> {
     let catalog_entry = find_model_by_id(models, model_id).cloned();
     if let Some(entry) = &catalog_entry {
-        let credentials = resolve_credentials_enforced(entry, session_key, disable_api_key_auth);
+        let credentials = resolve_credentials_enforced(
+            entry,
+            session_key,
+            disable_api_key_auth,
+            api_key_override,
+            provider_override,
+            provider_registry,
+        );
         let sampler = sampling_config_for_model(
             entry,
             credentials,
@@ -4555,7 +4599,7 @@ pub fn resolve_aux_model_sampling_config(
             env_key: None,
             api_base_url: None,
         };
-        let credentials = resolve_credentials_enforced(&entry, session_key, disable_api_key_auth);
+        let credentials = resolve_credentials_enforced(&entry, session_key, disable_api_key_auth, None, None, None);
         let sampler = sampling_config_for_model(
             &entry,
             credentials,
@@ -4720,26 +4764,10 @@ pub fn resolve_model_to_sampling_config(
     client_version: Option<String>,
     fallback_entry: Option<ModelEntry>,
 ) -> Option<SamplerConfig> {
-    resolve_model_to_sampling_config_with_override(
-        model_id, models, session_key, alpha_test_key, client_version, fallback_entry, None,
-    )
-}
-
-/// Like [`resolve_model_to_sampling_config`] but with an explicit API key override
-/// (e.g. from `--api-key` CLI flag).
-pub fn resolve_model_to_sampling_config_with_override(
-    model_id: &str,
-    models: &IndexMap<String, ModelEntry>,
-    session_key: Option<&str>,
-    alpha_test_key: Option<String>,
-    client_version: Option<String>,
-    fallback_entry: Option<ModelEntry>,
-    api_key_override: Option<&str>,
-) -> Option<SamplerConfig> {
     let entry = find_model_by_id(models, model_id)
         .cloned()
         .or(fallback_entry)?;
-    let credentials = resolve_credentials_with_override(&entry, session_key, api_key_override);
+    let credentials = resolve_credentials(&entry, session_key);
     Some(sampling_config_for_model(
         &entry,
         credentials,
@@ -4749,6 +4777,8 @@ pub fn resolve_model_to_sampling_config_with_override(
         None,
     ))
 }
+
+
 fn resolve_hidden_default_web_search_sampling_config(
     model_id: &str,
     session_key: Option<&str>,
@@ -4794,7 +4824,7 @@ fn resolve_hidden_default_web_search_sampling_config(
         env_key: None,
         api_base_url: None,
     };
-    let credentials = resolve_credentials_enforced(&entry, session_key, disable_api_key_auth);
+    let credentials = resolve_credentials_enforced(&entry, session_key, disable_api_key_auth, None, None, None);
     sampling_config_for_model(
         &entry,
         credentials,
@@ -4814,7 +4844,7 @@ pub fn resolve_web_search_sampling_config(
     endpoints: &EndpointsConfig,
 ) -> Option<SamplerConfig> {
     let resolved = if let Some(entry) = find_model_by_id(models, model_id).cloned() {
-        let credentials = resolve_credentials_enforced(&entry, session_key, disable_api_key_auth);
+        let credentials = resolve_credentials_enforced(&entry, session_key, disable_api_key_auth, None, None, None);
         Some(sampling_config_for_model(
             &entry,
             credentials,
@@ -5350,6 +5380,9 @@ reasoning_effort = "low"
             false,
             None,
             None,
+            None,
+            None,
+            None,
         )
         .expect("override entry has an API key, so resolution succeeds");
         assert_eq!(resolved.model, "v9m-rl-learnability-tp8");
@@ -5835,7 +5868,7 @@ reasoning_effort = "low"
         assert_eq!(creds.auth_type, AuthType::ApiKey);
         assert_eq!(creds.api_key.as_deref(), Some("model-key"));
         // With override: CLI key wins over model key.
-        let creds = resolve_credentials_with_override(&model, None, Some("cli-override-key"));
+        let creds = resolve_credentials_with_override(&model, None, Some("cli-override-key"), None, None);
         assert_eq!(creds.auth_type, AuthType::ApiKey);
         assert_eq!(creds.api_key.as_deref(), Some("cli-override-key"));
     }

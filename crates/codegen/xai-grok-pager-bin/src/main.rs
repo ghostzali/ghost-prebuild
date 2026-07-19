@@ -1027,6 +1027,8 @@ async fn run_agent_command(
         .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
     let mut agent_config = AgentConfig::new_from_toml_cfg(&raw_config)
         .map_err(|e| anyhow::anyhow!("Failed to create agent config: {}", e))?;
+    agent_config.provider_override = agent_args.provider.clone();
+    agent_config.api_key_override = agent_args.api_key.clone();
     agent_config.default_model_override = agent_args.model.clone();
     agent_config.reasoning_effort_override = agent_args
         .reasoning_effort
@@ -1959,8 +1961,10 @@ async fn async_main() -> Result<()> {
                 trust: args.trust,
                 output_format: args.output_format,
                 json_schema,
-                model: args.model,
-                rules: args.rules,
+                model: args.model.clone(),
+                provider: args.provider.clone(),
+                api_key: args.api_key.clone(),
+                rules: args.rules.clone(),
                 system_prompt_override: args.system_prompt_override.clone(),
                 continue_last_session: args.continue_last_session,
                 fork_session: args.fork_session,
