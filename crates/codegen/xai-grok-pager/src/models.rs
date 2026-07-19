@@ -23,10 +23,17 @@ pub async fn list_available_models(
     println!();
 
     // Resolve provider filter once
-    let provider = provider_filter
-        .and_then(|filter| {
-            let p = agent_config.providers.find(filter);
-            if p.is_none() {
+    let provider = match provider_filter {
+        Some(filter) => match agent_config.providers.find(filter) {
+            Some(p) => {
+                println!("Models for provider '{}':", p.name);
+                if p.api_base.is_none() {
+                    println!("  (no api_base configured)");
+                }
+                println!();
+                Some(p)
+            }
+            None => {
                 eprintln!(
                     "Provider '{}' not found in configured providers. Available: {}",
                     filter,
@@ -38,17 +45,11 @@ pub async fn list_available_models(
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
+                return Ok(());
             }
-            p
-        });
-
-    if let Some(p) = provider {
-        println!("Models for provider '{}':", p.name);
-        if p.api_base.is_none() {
-            println!("  (no api_base configured)");
-        }
-        println!();
-    }
+        },
+        None => None,
+    };
 
     let cancel = CancellationToken::new();
     let spawned = crate::acp::spawn::spawn_grok_shell(agent_config.clone(), &cancel, None).await?;
