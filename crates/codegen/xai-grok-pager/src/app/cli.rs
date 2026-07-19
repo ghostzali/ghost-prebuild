@@ -48,8 +48,18 @@ pub enum Command {
     Plugin(crate::plugin_cmd::PluginArgs),
     /// Manage cross-session memory
     Memory(crate::memory_cmd::MemoryArgs),
+    /// List configured providers and exit
+    Providers {
+        /// Emit machine-readable JSON output.
+        #[arg(long)]
+        json: bool,
+    },
     /// List available models and exit
-    Models,
+    Models {
+        /// Filter models by provider name
+        #[arg(long = "provider", value_name = "PROVIDER")]
+        provider: Option<String>,
+    },
     /// List, search, or restore sessions
     Sessions(crate::sessions_cmd::SessionsArgs),
     /// Fetch and install managed configuration
