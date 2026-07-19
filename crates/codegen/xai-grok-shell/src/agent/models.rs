@@ -9,7 +9,7 @@ use agent_client_protocol as acp;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use indexmap::IndexMap;
 
-use crate::agent::config::{self, ModelEntry, resolve_credentials, resolve_credentials_with_override, sampling_config_for_model};
+use crate::agent::config::{self, ModelEntry, resolve_credentials_with_override, sampling_config_for_model};
 use crate::auth::{AuthManager, GrokAuth, GrokComConfig};
 use crate::remote::{FetchModelsResult, fetch_models_blocking};
 use crate::sampling::SamplerConfig as SamplingConfig;

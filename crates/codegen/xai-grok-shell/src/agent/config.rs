@@ -4320,6 +4320,14 @@ pub fn resolve_credentials(model: &ModelEntry, session_key: Option<&str>) -> Res
 
 /// Resolve credentials with an explicit API key override.
 /// Priority: api_key_override > model api_key/env_key > session token > XAI_API_KEY.
+/// Priority: api_key_override > provider.resolve_api_key() > model key > session > XAI_API_KEY.
+///
+/// **Provider scoping**: when `provider_override` is set, ambient `XAI_API_KEY` is
+/// NOT consulted. This prevents pairing a provider's `api_base` URL with an unrelated
+/// ambient credential (e.g., sending an xAI bearer to `https://api.openai.com/v1`).
+///
+/// `provider.api_base` is only used when that provider also supplies the key
+/// (via `resolve_api_key()`); otherwise the model's default `info.base_url` is used.
 pub fn resolve_credentials_with_override(
     model: &ModelEntry,
     session_key: Option<&str>,
@@ -4331,43 +4339,30 @@ pub fn resolve_credentials_with_override(
     let provider = provider_override
         .zip(provider_registry)
         .and_then(|(name, reg)| reg.providers.iter().find(|p| p.name == name));
-        
-    let base_url = provider
-        .and_then(|p| p.api_base.clone())
-        .unwrap_or_else(|| {
-            if api_key_override.is_none() && model.own_credential().is_none() && session_key.is_none() && crate::agent::auth_method::read_xai_api_key_env().is_ok() {
-                model.api_base_url.clone().unwrap_or_else(|| info.base_url.clone())
-            } else {
-                info.base_url.clone()
-            }
-        });
+    let has_provider = provider.is_some();
+    let provider_base = provider.and_then(|p| p.api_base.clone());
+    let provider_key = provider.and_then(|p| p.resolve_api_key());
 
-    let (api_key, auth_type) = if let Some(key) = api_key_override {
-        (
-            Some(key.to_owned()),
-            xai_chat_state::AuthType::ApiKey,
-        )
-    } else if let Some(key) = provider.and_then(|p| p.resolve_api_key()) {
-        (
-            Some(key),
-            xai_chat_state::AuthType::ApiKey,
-        )
+    let (api_key, base_url, auth_type) = if let Some(key) = api_key_override {
+        // CLI --api-key: use provider base if set, else model base
+        (Some(key.to_owned()), provider_base.unwrap_or_else(|| info.base_url.clone()), xai_chat_state::AuthType::ApiKey)
+    } else if let Some(key) = provider_key {
+        // Provider has a resolvable key: use provider's base_url
+        (Some(key), provider_base.unwrap_or_else(|| info.base_url.clone()), xai_chat_state::AuthType::ApiKey)
     } else if let Some(key) = model.own_credential() {
-        (
-            Some(key),
-            xai_chat_state::AuthType::ApiKey,
-        )
+        (Some(key), info.base_url.clone(), xai_chat_state::AuthType::ApiKey)
     } else if let Some(key) = session_key {
-        (
-            Some(key.to_owned()),
-            xai_chat_state::AuthType::SessionToken,
-        )
-    } else if let Ok(key) = crate::agent::auth_method::read_xai_api_key_env() {
-        (
-            Some(key),
-            xai_chat_state::AuthType::ApiKey,
-        )
+        (Some(key.to_owned()), info.base_url.clone(), xai_chat_state::AuthType::SessionToken)
+    } else if !has_provider && crate::agent::auth_method::read_xai_api_key_env().is_ok() {
+        let url = model.api_base_url.clone().unwrap_or_else(|| info.base_url.clone());
+        (crate::agent::auth_method::read_xai_api_key_env().ok(), url, xai_chat_state::AuthType::ApiKey)
     } else {
+        if has_provider {
+            tracing::warn!(
+                provider = % provider_override.unwrap_or("?"),
+                "provider selected but no API key resolved; requests will be unauthenticated",
+            );
+        }
         if let Some(ref env_keys) = model.env_key
             && !env_keys.is_empty()
         {
@@ -4377,7 +4372,7 @@ pub fn resolve_credentials_with_override(
                  requests will have no API key",
             );
         }
-        (None, xai_chat_state::AuthType::ApiKey)
+        (None, info.base_url.clone(), xai_chat_state::AuthType::ApiKey)
     };
     let auth_scheme = info.auth_scheme;
     tracing::debug!(
@@ -4778,7 +4773,6 @@ pub fn resolve_model_to_sampling_config(
     ))
 }
 
-
 fn resolve_hidden_default_web_search_sampling_config(
     model_id: &str,
     session_key: Option<&str>,
@@ -4834,6 +4828,8 @@ fn resolve_hidden_default_web_search_sampling_config(
         None,
     )
 }
+/// Web search uses its own configured model/key, not the main model's provider.
+/// Intentionally passes `None` for provider-level overrides.
 pub fn resolve_web_search_sampling_config(
     model_id: &str,
     models: &IndexMap<String, ModelEntry>,

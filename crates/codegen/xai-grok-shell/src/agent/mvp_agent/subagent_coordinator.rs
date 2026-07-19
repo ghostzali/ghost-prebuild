@@ -432,6 +432,7 @@ impl MvpAgent {
             }
             None => (None, None),
         };
+        let cfg = self.cfg.borrow();
         Some(crate::agent::subagent::SubagentSpawnContext {
             lsp: parent_lsp,
             gateway: self.gateway.clone(),
@@ -448,9 +449,9 @@ impl MvpAgent {
                 .unwrap_or_else(|| acp::AuthMethodId::new("default")),
             model_id: parent_model_id,
             storage_mode: self.storage_mode,
-            api_key_override: self.cfg.borrow().api_key_override.clone(),
-            provider_override: self.cfg.borrow().provider_override.clone(),
-            provider_registry: self.cfg.borrow().providers.clone(),
+            api_key_override: cfg.api_key_override.clone(),
+            provider_override: cfg.provider_override.clone(),
+            provider_registry: cfg.providers.clone(),
             auth: self.current_or_buffered_auth(),
             parent_cwd: parent_cwd.clone(),
             parent_session_id: parent_session_id.to_string(),

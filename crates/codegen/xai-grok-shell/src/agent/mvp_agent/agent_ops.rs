@@ -1130,9 +1130,15 @@ impl MvpAgent {
             _ => None,
         };
         let has_session_key = session.is_some();
-        let mut credentials = resolve_credentials(
+        let api_key_override = self.cfg.borrow().api_key_override.clone();
+        let provider_override = self.cfg.borrow().provider_override.clone();
+        let providers = self.cfg.borrow().providers.clone();
+        let mut credentials = resolve_credentials_with_override(
             model,
             session.as_ref().map(|a| a.key.as_str()),
+            api_key_override.as_deref(),
+            provider_override.as_deref(),
+            Some(&providers),
         );
         if matches!(preferred, Some(crate ::auth::PreferredAuthMethod::Oidc))
             && !model.has_own_credentials()

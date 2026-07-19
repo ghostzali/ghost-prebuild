@@ -151,6 +151,9 @@ pub(crate) fn ctx_with_toggle(toggle: HashMap<String, bool>) -> SubagentSpawnCon
         parent_terminal_backend: None,
         parent_notification_handle: None,
         parent_scheduler_handle: None,
+        api_key_override: None,
+        provider_override: None,
+        provider_registry: xai_grok_config_types::ProviderRegistry { providers: vec![], default_provider: None },
     }
 }
 pub(crate) fn make_request(
