@@ -144,6 +144,43 @@ impl ProviderConfig {
         None
     }
 
+    /// Check whether a resolvable key exists — side-effect-free (no logging).
+    /// Used by `ghost providers` listing so the key-status column doesn't
+    /// emit `tracing::warn!` for expected absences.
+    ///
+    /// Mirrors [`resolve_api_key`]'s resolution order:
+    /// codex auth file > api_key with \${ENV_VAR} substitution > env_key > None.
+    pub fn has_resolvable_key(&self) -> bool {
+        // Codex auth mode — check file existence
+        if self.auth_mode == Some(ProviderAuthMode::Codex) {
+            let auth_path = codex_home_path().join("auth.json");
+            if auth_path.exists() {
+                // File exists; resolve_codex_auth() would also validate JSON,
+                // but for a listing command file presence is sufficient signal.
+                return true;
+            }
+            return false;
+        }
+
+        // Check api_key with env var substitution
+        if let Some(ref key) = self.api_key {
+            let resolved = resolve_env_vars_in_string(key);
+            if resolved != *key {
+                // Env var substitution occurred — check it resolved to non-empty
+                return !resolved.is_empty();
+            }
+            // Plain key
+            return !resolved.is_empty();
+        }
+
+        // Check env_key
+        if let Some(ref env_var) = self.env_key {
+            return std::env::var(env_var).is_ok_and(|v| !v.is_empty());
+        }
+
+        false
+    }
+
     /// Resolve the effective API base URL with env var substitution.
     pub fn resolve_api_base(&self) -> Option<String> {
         // Codex auth mode always uses OpenAI API

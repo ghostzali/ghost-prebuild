@@ -1795,14 +1795,23 @@ async fn async_main() -> Result<()> {
                 let _otel_guard = xai_grok_telemetry::otel_layer::otel_guard();
                 return xai_grok_pager::plugin_cmd::run(plugin_args).await;
             }
-            Command::Models => {
+            Command::Models { provider } => {
                 init_tracing_simple("cli");
                 let _otel_guard = xai_grok_telemetry::otel_layer::otel_guard();
                 let config = xai_grok_shell::config::load_effective_config_disk_only()
                     .map_err(|e| anyhow::anyhow!("Failed to load config: {e}"))?;
                 let agent_config = AgentConfig::new_from_toml_cfg(&config)
                     .map_err(|e| anyhow::anyhow!("Failed to create agent config: {e}"))?;
-                return xai_grok_pager::models::list_available_models(&agent_config).await;
+                return xai_grok_pager::models::list_available_models(&agent_config, provider.as_deref()).await;
+            }
+            Command::Providers { json } => {
+                init_tracing_simple("cli");
+                let _otel_guard = xai_grok_telemetry::otel_layer::otel_guard();
+                let config = xai_grok_shell::config::load_effective_config_disk_only()
+                    .map_err(|e| anyhow::anyhow!("Failed to load config: {e}"))?;
+                let agent_config = AgentConfig::new_from_toml_cfg(&config)
+                    .map_err(|e| anyhow::anyhow!("Failed to create agent config: {e}"))?;
+                return xai_grok_pager::providers::list_providers(&agent_config, json).await;
             }
             Command::Leader(leader_args) => {
                 init_tracing_simple("cli");

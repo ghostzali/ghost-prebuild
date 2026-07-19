@@ -1,4 +1,4 @@
-//! `grok models` subcommand.
+//! `ghost models` subcommand.
 
 use anyhow::Result;
 use tokio_util::sync::CancellationToken;
@@ -7,10 +7,13 @@ use xai_grok_shell::cli_models::{AuthStatus, list_models};
 
 use crate::client_identity::{PAGER_CLIENT_TYPE, PAGER_CLIENT_VERSION};
 
-pub async fn list_available_models(agent_config: &AgentConfig) -> Result<()> {
+pub async fn list_available_models(
+    agent_config: &AgentConfig,
+    provider_filter: Option<&str>,
+) -> Result<()> {
     match AuthStatus::resolve(agent_config) {
         AuthStatus::ApiKey => println!("You are using XAI_API_KEY."),
-        AuthStatus::LoggedIn(host) => println!("You are logged in with {}.", host),
+        AuthStatus::LoggedIn(host) => println!("You are logged in with {host}."),
         AuthStatus::ModelCredentials(model) => {
             println!("Model '{model}' is using its own API key.");
         }
@@ -18,6 +21,35 @@ pub async fn list_available_models(agent_config: &AgentConfig) -> Result<()> {
         AuthStatus::NotAuthenticated => println!("You are not authenticated."),
     }
     println!();
+
+    // Resolve provider filter once
+    let provider = match provider_filter {
+        Some(filter) => match agent_config.providers.find(filter) {
+            Some(p) => {
+                println!("Models for provider '{}':", p.name);
+                if p.api_base.is_none() {
+                    println!("  (no api_base configured)");
+                }
+                println!();
+                Some(p)
+            }
+            None => {
+                eprintln!(
+                    "Provider '{}' not found in configured providers. Available: {}",
+                    filter,
+                    agent_config
+                        .providers
+                        .providers
+                        .iter()
+                        .map(|p| p.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                return Ok(());
+            }
+        },
+        None => None,
+    };
 
     let cancel = CancellationToken::new();
     let spawned = crate::acp::spawn::spawn_grok_shell(agent_config.clone(), &cancel, None).await?;
@@ -28,6 +60,13 @@ pub async fn list_available_models(agent_config: &AgentConfig) -> Result<()> {
     println!();
     println!("Available models:");
     for m in state.available_models {
+        // Apply provider filter if specified
+        if let Some(p) = provider {
+            let model_belongs = p.models.iter().any(|s| s.as_str() == m.model_id.0.as_ref());
+            if !model_belongs {
+                continue;
+            }
+        }
         if m.model_id == state.current_model_id {
             println!("  * {} (default)", m.model_id.0);
         } else {
