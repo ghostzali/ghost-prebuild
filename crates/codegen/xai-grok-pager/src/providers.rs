@@ -161,20 +161,20 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn has_resolvable_key_codex_no_file_is_false() {
-        // Override HOME to a temp dir so the test doesn't depend on ambient ~/.codex/auth.json
+        // Override CODEX_HOME to a temp dir so the test doesn't depend on ambient ~/.codex/auth.json
         let tmp = tempfile::tempdir().expect("tempdir");
         let p = ProviderConfig {
             name: "test".into(),
             auth_mode: Some(ProviderAuthMode::Codex),
             ..ProviderConfig::named("test")
         };
-        // codex_home_path() → $CODEX_HOME or $HOME/.codex
-        // We can't easily override codex_home_path(), so set CODEX_HOME to the temp dir
-        // which has no auth.json
-        std::env::set_var("CODEX_HOME", tmp.path());
+        // SAFETY: test is serialized via #[serial_test::serial]; no concurrent env mutation.
+        unsafe { std::env::set_var("CODEX_HOME", tmp.path()); }
         let result = p.has_resolvable_key();
-        std::env::remove_var("CODEX_HOME");
+        // SAFETY: restoring env to previous state after isolated test.
+        unsafe { std::env::remove_var("CODEX_HOME"); }
         assert!(!result, "no auth.json in empty temp dir → false");
     }
 
