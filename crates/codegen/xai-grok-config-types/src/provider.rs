@@ -329,7 +329,13 @@ fn check_oauth_store(provider_name: &str) -> bool {
         .ok()
         .or_else(|| std::env::var("GROK_HOME").ok())
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".ghost"));
+        .unwrap_or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_default()
+                .join(".ghost")
+        });
     let creds_path = ghost_home.join("credentials.json");
     if let Ok(data) = std::fs::read_to_string(&creds_path) {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
@@ -440,6 +446,7 @@ impl ProviderRegistry {
                 api_key: None,
                 env_key: None,
                 auth_mode: Some(ProviderAuthMode::Codex),
+                oauth: None,
                 models: CODEX_DEFAULT_MODELS.iter().map(|s| s.to_string()).collect(),
                 headers: Vec::new(),
             });
