@@ -164,6 +164,8 @@ pub struct HeadlessOptions {
     pub output_format: OutputFormat,
     pub json_schema: Option<serde_json::Value>,
     pub model: Option<String>,
+    pub provider: Option<String>,
+    pub api_key: Option<String>,
     pub rules: Option<String>,
     pub system_prompt_override: Option<String>,
     pub continue_last_session: bool,
@@ -867,6 +869,12 @@ pub async fn run_single_turn(
     // So initial system prompt / `system_prompt_label` use `-m`, not a later SetSessionModel.
     if let Some(ref model) = options.model {
         agent_config.default_model_override = Some(model.clone());
+    }
+    if let Some(ref provider) = options.provider {
+        agent_config.provider_override = Some(provider.clone());
+    }
+    if let Some(ref api_key) = options.api_key {
+        agent_config.api_key_override = Some(api_key.clone());
     }
 
     agent_config.resolve_runtime_fields(&xai_grok_shell::agent::config::RuntimeResolutionContext {

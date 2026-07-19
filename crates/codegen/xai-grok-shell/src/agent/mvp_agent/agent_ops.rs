@@ -40,12 +40,15 @@ impl MvpAgent {
         let session_key = self.auth_manager.current_or_expired().map(|a| a.key.clone());
         let models = self.models_manager.models();
         let endpoints = self.models_manager.endpoints();
-        let (disable_api_key_auth, alpha_test_key, client_version) = {
+        let (disable_api_key_auth, alpha_test_key, client_version, api_key_override, provider_override, providers) = {
             let cfg = self.cfg.borrow();
             (
                 cfg.grok_com_config.api_key_auth_disabled(),
                 cfg.endpoints.alpha_test_key.clone(),
                 cfg.client_version.clone(),
+                cfg.api_key_override.clone(),
+                cfg.provider_override.clone(),
+                cfg.providers.clone(),
             )
         };
         let config = match crate::agent::config::resolve_aux_model_sampling_config(
@@ -56,6 +59,9 @@ impl MvpAgent {
             disable_api_key_auth,
             alpha_test_key,
             client_version,
+            api_key_override.as_deref(),
+            provider_override.as_deref(),
+            Some(&providers),
         ) {
             Some(mut cfg) => {
                 cfg.client_identifier = primary.client_identifier.clone();
@@ -1124,9 +1130,15 @@ impl MvpAgent {
             _ => None,
         };
         let has_session_key = session.is_some();
-        let mut credentials = resolve_credentials(
+        let api_key_override = self.cfg.borrow().api_key_override.clone();
+        let provider_override = self.cfg.borrow().provider_override.clone();
+        let providers = self.cfg.borrow().providers.clone();
+        let mut credentials = resolve_credentials_with_override(
             model,
             session.as_ref().map(|a| a.key.as_str()),
+            api_key_override.as_deref(),
+            provider_override.as_deref(),
+            Some(&providers),
         );
         if matches!(preferred, Some(crate ::auth::PreferredAuthMethod::Oidc))
             && !model.has_own_credentials()

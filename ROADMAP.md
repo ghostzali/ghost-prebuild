@@ -98,18 +98,18 @@ Providers can have:
 
 **⚠️ Migration note (before Phase 2):** PR #1 shipped `ProviderAuthMode` as a mutually-exclusive enum (`ApiKey | Codex`). To support dual-auth providers (Anthropic with both API key + OAuth), the config schema must migrate from `auth_mode: Option<ProviderAuthMode>` to a dual-arm `ProviderAuth { api_key: Option<...>, oauth: Option<...> }` **before** Phase 2 OAuth lands. Without this migration, Anthropic dual-auth is unreachable. A `[providers.anthropic]` that wants both modes requires two config arms, not a single enum variant.
 
-**Goal**: A `--provider` CLI flag routes to the correct API base + API key.
+**Goal**: ✅ DONE (PR #3 + PR #4). `--provider` / `--api-key` CLI flags wired through full credential resolution.
 
-| ID | Task | Priority | Detail |
-|----|------|----------|--------|
-| P1.1 | Add `--provider` CLI flag to `PagerArgs` | 🔴 Critical | In `xai-grok-pager/src/app/cli.rs` (line 430). Default: read from config or env. Should override any model/provider selection. |
-| P1.2 | Load `ProviderRegistry` from `config.toml` | 🔴 Critical | In `xai-grok-config` config loader. Parse `[providers]` section. Fall back to embedded catalog for defaults. |
-| P1.3 | Wire provider into sampler HTTP client | 🔴 Critical | In `xai-grok-sampler`: select the right `api_base` URL from the active provider. Construct HTTP client headers with resolved API key. |
-| P1.4 | Route API key into auth credentials | 🔴 Critical | `GrokAuthCredentials::from_provider(&provider)` — calls `resolve_api_key()` and constructs credentials. |
-| P1.5 | Handle `api_base` URL selection | 🔴 Critical | Model's explicit `base_url` overrides provider's `api_base` which overrides hardcoded default. Per-model base URLs (Azure, proxies). |
-| P1.6 | `ghost provider list` command | 🟡 High | List all configured providers, their auth mode (API key / OAuth / Codex), model count, status. |
-| P1.7 | `ghost models list [--provider]` command | 🟡 High | List models. Filter by provider. Show context windows, reasoning support, cost tiers. |
-| P1.8 | Runtime `/provider` slash command | 🟢 Medium | In TUI: switch provider mid-session. Lists configured providers, shows current. |
+| ID | Task | Priority | Detail | Status |
+|----|------|----------|--------|--------|
+| P1.1 | Add `--provider` CLI flag to `PagerArgs` | 🔴 Critical | In `xai-grok-pager/src/app/cli.rs`. Also `--api-key` flag. Both in `AgentArgs` + `HeadlessOptions`. | ✅ PR #3 |
+| P1.2 | Load `ProviderRegistry` from `config.toml` | 🔴 Critical | `Config.providers: ProviderRegistry` deserialized from `[[providers]]` TOML. | ✅ PR #4 |
+| P1.3 | Wire provider into credential resolution | 🔴 Critical | `resolve_credentials_with_override()` selects api_base URL + resolves api_key from provider. All 7 call sites updated. | ✅ PR #4 |
+| P1.4 | Route API key into auth credentials | 🔴 Critical | Provider `resolve_api_key()` inserted in priority chain: `api_key_override > provider key > model key > session > XAI_API_KEY`. `GrokAuthCredentials::with_api_key()`. | ✅ PR #1 |
+| P1.5 | Handle `api_base` URL selection | 🔴 Critical | Provider's `api_base` overrides model's base. Fallback to model.info.base_url. | ✅ PR #4 |
+| P1.6 | `ghost provider list` command | 🟡 High | List all configured providers, their auth mode (API key / OAuth / Codex), model count, status. | ⏳ |
+| P1.7 | `ghost models list [--provider]` command | 🟡 High | List models. Filter by provider. Show context windows, reasoning support, cost tiers. | ⏳ |
+| P1.8 | Runtime `/provider` slash command | 🟢 Medium | In TUI: switch provider mid-session. Lists configured providers, shows current. | ⏳ |
 
 ### Phase 2: OAuth / Subscription Auth Flows
 
@@ -177,16 +177,20 @@ Providers can have:
 
 ---
 
-## Immediate Next Steps (First Sprint)
+## Immediate Next Steps (Post-PR #4)
 
-These are the concrete tasks for the current branch `feat/pi-inspired-multi-provider`:
+These are the concrete tasks for the current branch `feat/wire-credentials-to-callers`:
 
-1. **[P0.1]** Map the sampler → HTTP client path
-2. **[P0.2]** Map config loading
-3. **[P0.5]** Design and document the `config.toml` provider schema
-4. **[P1.1]** Add `--provider` CLI flag
-5. **[P1.2]** Load `ProviderRegistry` from `config.toml`
-6. **[P1.3]** Wire provider into sampler HTTP client
+✅ ~~1. [P0.1] Map the sampler → HTTP client path~~ → Done: `PHASE0_AUDIT.md`
+✅ ~~2. [P0.2] Map config loading~~ → Done: `PHASE0_AUDIT.md`
+✅ ~~3. [P0.5] Design and document the `config.toml` provider schema~~ → Done: `ROADMAP.md` § Config Schema Target
+✅ ~~4. [P1.1] Add `--provider` CLI flag~~ → Done: PR #3
+✅ ~~5. [P1.2] Load `ProviderRegistry` from `config.toml`~~ → Done: PR #4
+✅ ~~6. [P1.3] Wire provider into credential resolution~~ → Done: PR #4
+
+⏳ **Next**: End-to-end integration test — `ghost --provider openai --api-key sk-xxx` → actual OpenAI endpoint
+⏳ **[P1.6]** `ghost provider list` command
+⏳ **[P1.7]** `ghost models list [--provider]` command
 
 ---
 

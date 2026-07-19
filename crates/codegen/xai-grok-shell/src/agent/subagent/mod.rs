@@ -162,6 +162,9 @@ pub(crate) struct SubagentSpawnContext {
         reason = "unused in production; remove expect when wired or delete the item"
     )]
     pub storage_mode: crate::config::StorageMode,
+    pub api_key_override: Option<String>,
+    pub provider_override: Option<String>,
+    pub provider_registry: xai_grok_config_types::ProviderRegistry,
     pub auth: Option<crate::auth::GrokAuth>,
     pub parent_cwd: PathBuf,
     pub parent_session_id: String,
@@ -1018,7 +1021,7 @@ fn resolve_model_override_to_config(
     model_id: &str,
     ctx: &SubagentSpawnContext,
 ) -> Option<(xai_grok_sampler::SamplerConfig, acp::ModelId)> {
-    use crate::agent::config::{resolve_credentials, sampling_config_for_model};
+    use crate::agent::config::{resolve_credentials_with_override, sampling_config_for_model};
     let entry = crate::agent::config::find_model_by_id(&ctx.available_models, model_id).cloned()?;
     let canonical_model_id = if ctx.available_models.contains_key(model_id) {
         acp::ModelId::new(model_id)
@@ -1027,7 +1030,13 @@ fn resolve_model_override_to_config(
     };
     let session_key = ctx.auth.as_ref().map(|a| a.key.as_str());
     let has_session_key = session_key.is_some();
-    let mut credentials = resolve_credentials(&entry, session_key);
+    let mut credentials = resolve_credentials_with_override(
+        &entry,
+        session_key,
+        ctx.api_key_override.as_deref(),
+        ctx.provider_override.as_deref(),
+        Some(&ctx.provider_registry),
+    );
     credentials.auth_type = subagent_auth_type(Some(&entry), &ctx.auth_method_id);
     let resolved_auth_type = credentials.auth_type;
     let config = sampling_config_for_model(

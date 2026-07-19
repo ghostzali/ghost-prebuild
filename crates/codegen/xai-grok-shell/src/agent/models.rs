@@ -9,7 +9,7 @@ use agent_client_protocol as acp;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use indexmap::IndexMap;
 
-use crate::agent::config::{self, ModelEntry, resolve_credentials, sampling_config_for_model};
+use crate::agent::config::{self, ModelEntry, resolve_credentials_with_override, sampling_config_for_model};
 use crate::auth::{AuthManager, GrokAuth, GrokComConfig};
 use crate::remote::{FetchModelsResult, fetch_models_blocking};
 use crate::sampling::SamplerConfig as SamplingConfig;
@@ -947,8 +947,13 @@ impl ModelsManager {
         };
 
         let session_auth = auth_manager.current_or_expired();
-        let credentials =
-            resolve_credentials(current_model, session_auth.as_ref().map(|a| a.key.as_str()));
+        let credentials = resolve_credentials_with_override(
+            current_model,
+            session_auth.as_ref().map(|a| a.key.as_str()),
+            config.api_key_override.as_deref(),
+            config.provider_override.as_deref(),
+            Some(&config.providers),
+        );
 
         sampling_config_for_model(
             current_model,

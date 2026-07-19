@@ -52,7 +52,7 @@ use indexmap::IndexMap;
 use tokio::sync::oneshot;
 use xai_acp_lib::AcpAgentGatewaySender as GatewaySender;
 use crate::agent::auth_method;
-use crate::agent::config::{self, Config as AgentConfig, ModelEntry, resolve_credentials};
+use crate::agent::config::{self, Config as AgentConfig, ModelEntry, resolve_credentials, resolve_credentials_with_override};
 use crate::agent::feedback_client::FeedbackClient;
 use crate::agent::folder_trust;
 use crate::agent::models::{resolve_catalog_key, selectable_catalog_key_for_persisted};
