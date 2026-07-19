@@ -5,7 +5,6 @@
 //! `code_challenge` (SHA-256 hash, base64url-encoded).
 
 use base64::Engine;
-use rand::Rng;
 
 /// A PKCE pair: the secret verifier and its derived challenge.
 pub struct PkcePair {
@@ -18,8 +17,7 @@ pub struct PkcePair {
 /// Generate a PKCE code_verifier + code_challenge pair.
 pub fn generate_pkce() -> PkcePair {
     // 32 random bytes → 43 base64url chars (within 43-128 spec range)
-    let mut bytes = [0u8; 32];
-    rand::rng().try_fill_bytes(&mut bytes).expect("RNG failure");
+    let bytes: [u8; 32] = rand::random();
     let code_verifier = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
 
     // SHA-256(code_verifier) → base64url

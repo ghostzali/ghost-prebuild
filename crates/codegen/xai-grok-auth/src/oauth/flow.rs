@@ -8,11 +8,11 @@
 //! 5. Store in credential store
 
 use crate::credential_store::{Credential, CredentialStore};
-use crate::oauth::pkce::{self, PkcePair};
+use crate::oauth::pkce::{self};
 use anyhow::{Context, Result};
+use base64::Engine;
 use serde::Deserialize;
 use std::net::TcpListener;
-use std::sync::Arc;
 use tracing;
 
 /// Configuration for an OAuth PKCE flow.
@@ -118,8 +118,7 @@ pub async fn login_oauth<Store: CredentialStore + ?Sized>(
 
 /// Generate a random state nonce for CSRF protection.
 fn generate_state() -> String {
-    let mut bytes = [0u8; 16];
-    rand::rng().try_fill_bytes(&mut bytes).expect("RNG failure");
+    let bytes: [u8; 16] = rand::random();
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
@@ -195,9 +194,9 @@ async fn receive_callback(listener: TcpListener, expected_state: &str, _redirect
                 let _ = stream.write_all(response.as_bytes());
             }
             Err(e) => {
-                tracing::error!("Failed to accept OAuth callback: {e}");
+                tracing::error!("Failed to accept OAuth callback: {}", e);
             }
-        }
+        };
     });
 
     match tokio::time::timeout(std::time::Duration::from_secs(300), code_receiver).await {
