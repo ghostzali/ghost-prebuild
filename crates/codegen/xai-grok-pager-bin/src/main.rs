@@ -1889,9 +1889,11 @@ async fn async_main() -> Result<()> {
                 .await;
             }
             Command::Login {
+                provider,
                 legacy: _,
                 oauth,
                 device_auth,
+                api_key,
                 devbox,
             } => {
                 init_tracing_simple("cli");
@@ -1900,6 +1902,18 @@ async fn async_main() -> Result<()> {
                     .map_err(|e| anyhow::anyhow!("Failed to load config: {e}"))?;
                 let config = AgentConfig::new_from_toml_cfg(&config)
                     .map_err(|e| anyhow::anyhow!("Failed to create agent config: {e}"))?;
+
+                // Multi-provider login: if a provider is specified, use the new flow
+                if let Some(provider_name) = provider {
+                    return xai_grok_pager::login_cmd::login_provider(
+                        &config,
+                        &provider_name,
+                        oauth,
+                        api_key.as_deref(),
+                    ).await;
+                }
+
+                // Legacy Grok login
                 xai_grok_shell::auth::run_cli_login(&config, oauth, device_auth, devbox).await?;
                 println!();
                 xai_grok_shell::instrumentation::finalize_and_exit(0);

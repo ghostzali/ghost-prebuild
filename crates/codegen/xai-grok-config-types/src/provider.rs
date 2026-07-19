@@ -129,6 +129,11 @@ impl ProviderConfig {
             return resolve_codex_auth();
         }
 
+        // OAuth auth mode — read from credential store
+        if self.auth_mode == Some(ProviderAuthMode::OAuth) {
+            return resolve_oauth_credential(&self.name);
+        }
+
         // Check the api_key field with ${ENV_VAR} substitution
         if let Some(ref key) = self.api_key {
             let resolved = resolve_env_vars_in_string(key);
@@ -325,6 +330,15 @@ fn codex_home_path() -> std::path::PathBuf {
 /// Check if an OAuth credential exists for this provider.
 /// Reads `~/.ghost/credentials.json` and looks for an OAuth entry.
 fn check_oauth_store(provider_name: &str) -> bool {
+    resolve_oauth_credential_inner(provider_name).is_some()
+}
+
+/// Resolve an OAuth access token from the credential store.
+fn resolve_oauth_credential(provider_name: &str) -> Option<String> {
+    resolve_oauth_credential_inner(provider_name)
+}
+
+fn resolve_oauth_credential_inner(provider_name: &str) -> Option<String> {
     let ghost_home = std::env::var("GHOST_HOME")
         .ok()
         .or_else(|| std::env::var("GROK_HOME").ok())
@@ -343,21 +357,32 @@ fn check_oauth_store(provider_name: &str) -> bool {
                 if let Some(entry) = providers.get(provider_name) {
                     if let Some(auth_type) = entry.get("type").and_then(|v| v.as_str()) {
                         if auth_type == "oauth" {
+                            // Check expiry
                             if let Some(expires) = entry.get("expires_at").and_then(|v| v.as_u64()) {
                                 let now = std::time::SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
                                     .unwrap_or_default()
                                     .as_secs();
-                                return now < expires;
+                                if now >= expires {
+                                    tracing::warn!(
+                                        "Provider '{}': OAuth token expired. Run 'ghost login {} --oauth' to refresh.",
+                                        provider_name, provider_name
+                                    );
+                                    return None;
+                                }
                             }
-                            return true;
+                            // Return access token
+                            return entry.get("access_token").and_then(|v| v.as_str().map(|s| s.to_string()));
+                        }
+                        if auth_type == "api_key" {
+                            return entry.get("key").and_then(|v| v.as_str().map(|s| s.to_string()));
                         }
                     }
                 }
             }
         }
     }
-    false
+    None
 }
 
 /// A key-value pair for custom HTTP headers.
