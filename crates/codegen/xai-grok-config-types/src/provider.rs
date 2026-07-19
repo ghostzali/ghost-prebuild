@@ -697,4 +697,44 @@ mod tests {
             Some("https://api.openai.com/v1".into())
         );
     }
+
+    /// Integration test: multiple providers with different API keys.
+    /// Uses DeepSeek and Z.AI — validates each resolves its own key independently.
+    #[test]
+    #[serial_test::serial]
+    fn test_multi_provider_key_resolution() {
+        // SAFETY: serialized test; no concurrent env mutation.
+        unsafe {
+            std::env::set_var("DEEPSEEK_API_KEY", "sk-deepseek-test-key-123");
+            std::env::set_var("ZAI_API_KEY", "zai-test-token-456");
+        }
+
+        let deepseek = ProviderConfig {
+            name: "deepseek".into(),
+            api_base: Some("https://api.deepseek.com/v1".into()),
+            env_key: Some("DEEPSEEK_API_KEY".into()),
+            ..ProviderConfig::named("deepseek")
+        };
+        let zai = ProviderConfig {
+            name: "zai".into(),
+            api_base: Some("https://api.z.ai/v1".into()),
+            env_key: Some("ZAI_API_KEY".into()),
+            ..ProviderConfig::named("zai")
+        };
+
+        // Each provider resolves its own key
+        assert!(deepseek.has_resolvable_key());
+        assert_eq!(
+            deepseek.resolve_api_key(),
+            Some("sk-deepseek-test-key-123".into())
+        );
+        assert!(zai.has_resolvable_key());
+        assert_eq!(zai.resolve_api_key(), Some("zai-test-token-456".into()));
+
+        // Cleanup
+        unsafe {
+            std::env::remove_var("DEEPSEEK_API_KEY");
+            std::env::remove_var("ZAI_API_KEY");
+        }
+    }
 }
