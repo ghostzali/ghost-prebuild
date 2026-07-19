@@ -1,9 +1,13 @@
 # Ghost Prebuild — Multi-Provider Development Roadmap
 
-**Branch**: `feat/pi-inspired-multi-provider`  
+**Branch**: `feat/povider-list-commands` (current: PR #5)  
 **Objective**: Replicate Pi agent's provider/auth architecture — dual auth modes (OAuth subscription + API key), multiple models per provider, runtime provider switching, credential store with refresh.
 
-**Reference implementation**: [earendil-works/pi-mono](https://github.com/earendil-works/pi-mono) — `packages/ai/src/`
+**Reference implementation**: [earendil-works/pi](https://github.com/earendil-works/pi) — `packages/ai/src/`
+
+**Deep research**: [DEEP_RESEARCH_PI.md](./DEEP_RESEARCH_PI.md) — Pi's 36-provider architecture, dynamic/static model system, credential store, OAuth flows
+
+**Phases 2-5 plan**: [PLAN_PHASES_2_5.md](./PLAN_PHASES_2_5.md) — Combined execution plan (~15 PRs, ~4 weeks)
 
 ---
 

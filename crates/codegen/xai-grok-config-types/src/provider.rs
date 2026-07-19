@@ -26,6 +26,38 @@ pub enum ProviderAuthMode {
     ApiKey,
     /// Read OAuth access token from `~/.codex/auth.json` (ChatGPT subscription).
     Codex,
+    /// OAuth 2.0 PKCE flow with authorization code grant.
+    /// Provider must have `oauth` config with authorize_url, token_url, etc.
+    OAuth,
+}
+
+/// OAuth 2.0 configuration for a provider.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct OAuthConfig {
+    /// Authorization endpoint URL.
+    /// Example: "https://auth.openai.com/authorize"
+    pub authorize_url: String,
+
+    /// Token endpoint URL.
+    /// Example: "https://auth.openai.com/oauth/token"
+    pub token_url: String,
+
+    /// OAuth client ID (public client, no secret for desktop PKCE flow).
+    pub client_id: String,
+
+    /// Space-separated OAuth scopes.
+    /// Example: "openai.models.read openai.models.use"
+    #[serde(default)]
+    pub scopes: Option<String>,
+
+    /// Redirect URI for the OAuth callback.
+    /// Defaults to "http://localhost:PORT/callback" (loopback).
+    #[serde(default)]
+    pub redirect_uri: Option<String>,
+
+    /// Label shown during login, e.g. "OpenAI (ChatGPT Plus/Pro)".
+    #[serde(default)]
+    pub login_label: Option<String>,
 }
 
 /// A configured API provider with its own base URL, auth, and model list.
@@ -55,8 +87,13 @@ pub struct ProviderConfig {
     /// Auth mode for this provider.
     /// - `None` or `ProviderAuthMode::ApiKey`: standard API key flow.
     /// - `ProviderAuthMode::Codex`: read OAuth token from `~/.codex/auth.json`.
+    /// - `ProviderAuthMode::OAuth`: OAuth 2.0 PKCE flow using the `oauth` config.
     #[serde(default)]
     pub auth_mode: Option<ProviderAuthMode>,
+
+    /// OAuth 2.0 configuration (required when `auth_mode = "oauth"`).
+    #[serde(default)]
+    pub oauth: Option<OAuthConfig>,
 
     /// List of model IDs available from this provider.
     #[serde(default)]
@@ -76,6 +113,7 @@ impl ProviderConfig {
             api_key: None,
             env_key: None,
             auth_mode: None,
+            oauth: None,
             models: Vec::new(),
             headers: Vec::new(),
         }
@@ -154,12 +192,15 @@ impl ProviderConfig {
         // Codex auth mode — check file existence
         if self.auth_mode == Some(ProviderAuthMode::Codex) {
             let auth_path = codex_home_path().join("auth.json");
-            if auth_path.exists() {
-                // File exists; resolve_codex_auth() would also validate JSON,
-                // but for a listing command file presence is sufficient signal.
-                return true;
-            }
-            return false;
+            return auth_path.exists();
+        }
+
+        // OAuth auth mode — check credential store for valid token
+        if self.auth_mode == Some(ProviderAuthMode::OAuth) {
+            // Deferred to credential store: check ~/.ghost/credentials.json
+            // for this provider's OAuth token. For now, OAuth providers
+            // are considered "unresolved" until login is completed.
+            return check_oauth_store(&self.name);
         }
 
         // Check api_key with env var substitution
@@ -279,6 +320,38 @@ fn codex_home_path() -> std::path::PathBuf {
         .or_else(|| std::env::var("HOME").ok().map(std::path::PathBuf::from))
         .unwrap_or_else(|| std::path::PathBuf::from("."));
     home.join(".codex")
+}
+
+/// Check if an OAuth credential exists for this provider.
+/// Reads `~/.ghost/credentials.json` and looks for an OAuth entry.
+fn check_oauth_store(provider_name: &str) -> bool {
+    let ghost_home = std::env::var("GHOST_HOME")
+        .ok()
+        .or_else(|| std::env::var("GROK_HOME").ok())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".ghost"));
+    let creds_path = ghost_home.join("credentials.json");
+    if let Ok(data) = std::fs::read_to_string(&creds_path) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
+            if let Some(providers) = json.as_object() {
+                if let Some(entry) = providers.get(provider_name) {
+                    if let Some(auth_type) = entry.get("type").and_then(|v| v.as_str()) {
+                        if auth_type == "oauth" {
+                            if let Some(expires) = entry.get("expires_at").and_then(|v| v.as_u64()) {
+                                let now = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs();
+                                return now < expires;
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
 }
 
 /// A key-value pair for custom HTTP headers.
