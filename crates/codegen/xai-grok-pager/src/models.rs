@@ -1,4 +1,4 @@
-//! `grok models` subcommand.
+//! `ghost models` subcommand.
 
 use anyhow::Result;
 use tokio_util::sync::CancellationToken;
@@ -11,7 +11,6 @@ pub async fn list_available_models(
     agent_config: &AgentConfig,
     provider_filter: Option<&str>,
 ) -> Result<()> {
-    let has_provider_config = !agent_config.providers.providers.is_empty();
     match AuthStatus::resolve(agent_config) {
         AuthStatus::ApiKey => println!("You are using XAI_API_KEY."),
         AuthStatus::LoggedIn(host) => println!("You are logged in with {host}."),
@@ -23,11 +22,11 @@ pub async fn list_available_models(
     }
     println!();
 
-    // Display configured providers if present
-    if has_provider_config {
-        if let Some(filter) = provider_filter {
-            let provider = agent_config.providers.find(filter);
-            if provider.is_none() {
+    // Resolve provider filter once
+    let provider = provider_filter
+        .and_then(|filter| {
+            let p = agent_config.providers.find(filter);
+            if p.is_none() {
                 eprintln!(
                     "Provider '{}' not found in configured providers. Available: {}",
                     filter,
@@ -39,16 +38,16 @@ pub async fn list_available_models(
                         .collect::<Vec<_>>()
                         .join(", ")
                 );
-                return Ok(());
             }
-            println!("Models for provider '{}':", filter);
-        } else {
-            println!("Configured providers:");
-            for p in &agent_config.providers.providers {
-                println!("  {} — {}", p.name, p.api_base.as_deref().unwrap_or("(no api_base)"));
-            }
-            println!();
+            p
+        });
+
+    if let Some(p) = provider {
+        println!("Models for provider '{}':", p.name);
+        if p.api_base.is_none() {
+            println!("  (no api_base configured)");
         }
+        println!();
     }
 
     let cancel = CancellationToken::new();
@@ -61,13 +60,8 @@ pub async fn list_available_models(
     println!("Available models:");
     for m in state.available_models {
         // Apply provider filter if specified
-        if let Some(filter) = provider_filter {
-            // Check if this model belongs to the filtered provider
-            let model_belongs = agent_config
-                .providers
-                .find(filter)
-                .map(|p| p.models.iter().any(|s| s.as_str() == m.model_id.0.as_ref()))
-                .unwrap_or(false);
+        if let Some(p) = provider {
+            let model_belongs = p.models.iter().any(|s| s.as_str() == m.model_id.0.as_ref());
             if !model_belongs {
                 continue;
             }

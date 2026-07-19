@@ -107,8 +107,8 @@ Providers can have:
 | P1.3 | Wire provider into credential resolution | 🔴 Critical | `resolve_credentials_with_override()` selects api_base URL + resolves api_key from provider. All 7 call sites updated. | ✅ PR #4 |
 | P1.4 | Route API key into auth credentials | 🔴 Critical | Provider `resolve_api_key()` inserted in priority chain: `api_key_override > provider key > model key > session > XAI_API_KEY`. `GrokAuthCredentials::with_api_key()`. | ✅ PR #1 |
 | P1.5 | Handle `api_base` URL selection | 🔴 Critical | Provider's `api_base` overrides model's base. Fallback to model.info.base_url. | ✅ PR #4 |
-| P1.6 | `ghost provider list` command | 🟡 High | List all configured providers, their auth mode (API key / OAuth / Codex), model count, status. | ⏳ |
-| P1.7 | `ghost models list [--provider]` command | 🟡 High | List models. Filter by provider. Show context windows, reasoning support, cost tiers. | ⏳ |
+| P1.6 | `ghost provider list` command | 🟡 High | List all configured providers, their auth mode (API key / OAuth / Codex), model count, status. | ✅ PR #5 |
+| P1.7 | `ghost models list [--provider]` command | 🟡 High | List models. Filter by provider. Show context windows, reasoning support, cost tiers. | ✅ PR #5 |
 | P1.8 | Runtime `/provider` slash command | 🟢 Medium | In TUI: switch provider mid-session. Lists configured providers, shows current. | ⏳ |
 
 ### Phase 2: OAuth / Subscription Auth Flows
@@ -175,6 +175,20 @@ Providers can have:
 | P6.5 | Config profiles | 🟢 Medium | Named config profiles (`ghost --profile work`). Different provider/model/defaults per profile. |
 | P6.6 | User-provider config (custom) | 🟢 Medium | Users can add custom OpenAI-compatible providers in `~/.ghost/config.toml` without modifying the catalog. |
 
+### Phase 7: Product Rebranding — `ghost-code`
+
+**Goal**: Ship as `ghost-code` — a distinct product identity that separates the
+OpenAI-compatible provider CLI from its xAI-grok fork origins.
+
+| ID | Task | Priority | Detail |
+|----|------|----------|--------|
+| P7.1 | Binary rename | 🔴 Critical | `xai-grok-pager` → `ghost-code`. Update install scripts, CI artifacts, Homebrew/apt. |
+| P7.2 | Branding sweep | 🔴 Critical | All user-facing strings: CLI help, error messages, README, docs, `ghost providers` output. "ghost-prebuild" → "ghost-code". |
+| P7.3 | Config home rename | 🟡 High | `~/.ghost` → `~/.ghost-code` (with symlink fallback for migration). `GHOST_HOME` env var still works. |
+| P7.4 | Git remote + release assets | 🟡 High | GitHub repo, release tags, binary artifacts — all reflect `ghost-code`. |
+| P7.5 | Logo + visual identity | 🟢 Medium | Distinct terminal-friendly logo. Differentiate from Grok/xAI branding. |
+| P7.6 | Package registry entries | 🟢 Medium | Crates.io (`ghost-code`), npm (if CLI wrapper), Homebrew formula, winget. |
+
 ---
 
 ## Immediate Next Steps (Post-PR #4)
@@ -189,8 +203,8 @@ These are the concrete tasks for the current branch `feat/wire-credentials-to-ca
 ✅ ~~6. [P1.3] Wire provider into credential resolution~~ → Done: PR #4
 
 ⏳ **Next**: End-to-end integration test — `ghost --provider openai --api-key sk-xxx` → actual OpenAI endpoint
-⏳ **[P1.6]** `ghost provider list` command
-⏳ **[P1.7]** `ghost models list [--provider]` command
+⏳ **[P1.8]** Runtime `/provider` slash command in TUI
+⏳ **[P2.1]** OAuth login flow (`ghost login <provider> --oauth`)
 
 ---
 
