@@ -54,9 +54,13 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// List available models and exit
+    /// List available models and exit.
+    /// When `--provider` is specified, shows only models registered for
+    /// that provider that also appear in the global model catalog.
     Models {
-        /// Filter models by provider name
+        /// Filter models by provider name.
+        /// Only catalog-registered models assigned to this provider are shown;
+        /// provider-only models not in the catalog are omitted.
         #[arg(long = "provider", value_name = "PROVIDER")]
         provider: Option<String>,
     },

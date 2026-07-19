@@ -124,3 +124,81 @@ fn key_status_label(p: &ProviderConfig) -> &str {
         "✗ unset"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn has_key_quiet_direct_api_key() {
+        let p = ProviderConfig {
+            name: "test".into(),
+            api_key: Some("sk-abc123".into()),
+            ..ProviderConfig::named("test")
+        };
+        assert!(has_key_quiet(&p));
+    }
+
+    #[test]
+    fn has_key_quiet_empty_api_key_is_false() {
+        let p = ProviderConfig {
+            name: "test".into(),
+            api_key: Some("  ".into()),
+            ..ProviderConfig::named("test")
+        };
+        assert!(!has_key_quiet(&p));
+    }
+
+    #[test]
+    fn has_key_quiet_no_credentials_is_false() {
+        let p = ProviderConfig::named("test");
+        assert!(!has_key_quiet(&p));
+    }
+
+    #[test]
+    fn has_key_quiet_env_key_unset_is_false() {
+        let p = ProviderConfig {
+            name: "test".into(),
+            env_key: Some("GHOST_TEST_UNSET_VAR_XYZ123".into()),
+            ..ProviderConfig::named("test")
+        };
+        assert!(!has_key_quiet(&p));
+    }
+
+    #[test]
+    fn has_key_quiet_codex_no_file_is_false() {
+        let p = ProviderConfig {
+            name: "test".into(),
+            auth_mode: Some(ProviderAuthMode::Codex),
+            ..ProviderConfig::named("test")
+        };
+        // On most machines ~/.codex/auth.json won't exist
+        assert!(!has_key_quiet(&p));
+    }
+
+    #[test]
+    fn key_status_label_resolved() {
+        let p = ProviderConfig {
+            name: "test".into(),
+            api_key: Some("sk-abc".into()),
+            ..ProviderConfig::named("test")
+        };
+        assert_eq!(key_status_label(&p), "✓ resolved");
+    }
+
+    #[test]
+    fn key_status_label_unset() {
+        let p = ProviderConfig::named("test");
+        assert_eq!(key_status_label(&p), "✗ unset");
+    }
+
+    #[test]
+    fn auth_label_defaults_to_api_key() {
+        assert_eq!(auth_label(&None), "API key");
+    }
+
+    #[test]
+    fn auth_label_codex() {
+        assert_eq!(auth_label(&Some(ProviderAuthMode::Codex)), "Codex");
+    }
+}
