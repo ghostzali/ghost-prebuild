@@ -14,6 +14,7 @@ use base64::Engine;
 use serde::Deserialize;
 use std::net::TcpListener;
 use tracing;
+use urlencoding;
 
 /// Configuration for an OAuth PKCE flow.
 pub struct OAuthFlowConfig {
@@ -168,11 +169,11 @@ async fn receive_callback(listener: TcpListener, expected_state: &str, _redirect
                         let received_state = params
                             .iter()
                             .find(|(k, _)| k == "state")
-                            .map(|(_, v)| url_decode(v));
+                            .map(|(_, v)| urlencoding::decode(v).unwrap_or_default().into_owned());
                         let code = params
                             .iter()
                             .find(|(k, _)| k == "code")
-                            .map(|(_, v)| url_decode(v));
+                            .map(|(_, v)| urlencoding::decode(v).unwrap_or_default().into_owned());
 
                         if received_state.as_deref() == Some(&state)
                             && let Some(c) = code
@@ -249,25 +250,4 @@ async fn exchange_code(
 
     Ok(token)
 }
-
-/// Decode URL-encoded characters (e.g., %20 → space).
-fn url_decode(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        if c == '%' {
-            let hex: String = chars.by_ref().take(2).collect();
-            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                result.push(byte as char);
-            } else {
-                result.push('%');
-                result.push_str(&hex);
-            }
-        } else if c == '+' {
-            result.push(' ');
-        } else {
-            result.push(c);
-        }
-    }
-    result
 }

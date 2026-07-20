@@ -351,35 +351,32 @@ fn resolve_oauth_credential_inner(provider_name: &str) -> Option<String> {
                 .join(".ghost")
         });
     let creds_path = ghost_home.join("credentials.json");
-    if let Ok(data) = std::fs::read_to_string(&creds_path) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
-            if let Some(providers) = json.as_object() {
-                if let Some(entry) = providers.get(provider_name) {
-                    if let Some(auth_type) = entry.get("type").and_then(|v| v.as_str()) {
-                        if auth_type == "oauth" {
-                            // Check expiry
-                            if let Some(expires) = entry.get("expires_at").and_then(|v| v.as_u64()) {
-                                let now = std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_secs();
-                                if now >= expires {
-                                    tracing::warn!(
-                                        "Provider '{}': OAuth token expired. Run 'ghost login {} --oauth' to refresh.",
-                                        provider_name, provider_name
-                                    );
-                                    return None;
-                                }
-                            }
-                            // Return access token
-                            return entry.get("access_token").and_then(|v| v.as_str().map(|s| s.to_string()));
-                        }
-                        if auth_type == "api_key" {
-                            return entry.get("key").and_then(|v| v.as_str().map(|s| s.to_string()));
-                        }
-                    }
+    if let Ok(data) = std::fs::read_to_string(&creds_path)
+        && let Ok(json) = serde_json::from_str::<serde_json::Value>(&data)
+        && let Some(providers) = json.as_object()
+        && let Some(entry) = providers.get(provider_name)
+        && let Some(auth_type) = entry.get("type").and_then(|v| v.as_str())
+    {
+        if auth_type == "oauth" {
+            // Check expiry
+            if let Some(expires) = entry.get("expires_at").and_then(|v| v.as_u64()) {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                if now >= expires {
+                    tracing::warn!(
+                        "Provider '{}': OAuth token expired. Run 'ghost login {} --oauth' to refresh.",
+                        provider_name, provider_name
+                    );
+                    return None;
                 }
             }
+            // Return access token
+            return entry.get("access_token").and_then(|v| v.as_str().map(|s| s.to_string()));
+        }
+        if auth_type == "api_key" {
+            return entry.get("key").and_then(|v| v.as_str().map(|s| s.to_string()));
         }
     }
     None
