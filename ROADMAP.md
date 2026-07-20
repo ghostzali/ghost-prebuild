@@ -117,18 +117,20 @@ Providers can have:
 
 ### Phase 2: OAuth / Subscription Auth Flows
 
-**Goal**: Support `pi login <provider> --oauth` for subscription-based providers (OpenAI ChatGPT Plus/Pro, Anthropic Claude Pro/Max, GitHub Copilot).
+**Goal**: Support `ghost login <provider> --oauth` for subscription-based providers (OpenAI ChatGPT Plus/Pro, Anthropic Claude Pro/Max, GitHub Copilot).
 
-| ID | Task | Priority | Detail |
-|----|------|----------|--------|
-| P2.1 | `CredentialStore` trait | 🔴 Critical | Trait in `xai-grok-config-types`. File-backed impl reading/writing `~/.ghost/auth.json`. Serialized per-provider writes. |
-| P2.2 | `OAuthAuth` trait | 🔴 Critical | Traits: `login()`, `refresh()`, `to_auth()`. Provider-specific implementations. |
-| P2.3 | Browser-based OAuth flow | 🔴 Critical | Start local HTTP server on random port, open browser, capture callback. PKCE + state verification. Modeled on pi's `openai-codex.ts`. |
-| P2.4 | Device-code OAuth flow (headless) | 🟡 High | For headless/server environments. Display user code, poll for completion. |
-| P2.5 | Token refresh with double-checked locking | 🔴 Critical | Inside `CredentialStore::modify()`. Check expiry under lock, refresh once, persist. |
-| P2.6 | `ghost login <provider>` command | 🔴 Critical | Interactive login. Prompts for API key OR OAuth flow depending on provider. |
-| P2.7 | `ghost logout <provider>` command | 🟡 High | Remove stored credential. |
-| P2.8 | `ghost auth status` command | 🟢 Medium | Show which providers are authenticated, auth mode, account ID, token expiry. |
+**Status**: 🚧 In progress (PR #6 — P2.1-P2.6 delivered, P2.4 device-code + P2.7-P2.8 pending)
+
+| ID | Task | Priority | Detail | Status |
+|----|------|----------|--------|--------|
+| P2.1 | `CredentialStore` trait + `FileCredentialStore` | 🔴 Critical | Trait in `xai-grok-auth/src/credential_store.rs`. JSON-backed at `~/.ghost/credentials.json`. `read`/`write`/`modify`/`delete`. | ✅ PR #6 |
+| P2.2 | `Credential` enum (ApiKey + OAuth) | 🔴 Critical | `Credential::ApiKey { key }` + `Credential::OAuth { access_token, refresh_token, expires_at }`. Expiry checks. | ✅ PR #6 |
+| P2.3 | Browser-based OAuth PKCE flow | 🔴 Critical | `oauth/pkce.rs` (code challenge) + `oauth/flow.rs` (browser open, local callback server, token exchange). | ✅ PR #6 |
+| P2.4 | Device-code OAuth flow (headless) | 🟡 High | For headless/server environments. Display user code, poll for completion. | ⏳ |
+| P2.5 | Token resolution from credential store | 🔴 Critical | `resolve_oauth_credential()` reads `credentials.json`, checks expiry, returns access token. | ✅ PR #6 |
+| P2.6 | `ghost login <provider>` command | 🔴 Critical | `login_cmd.rs` — supports `--api-key` (direct key), `--oauth` (PKCE flow), codex auth. | ✅ PR #6 |
+| P2.7 | `ghost logout <provider>` command | 🟡 High | Remove stored credential from store. | ⏳ |
+| P2.8 | `ghost auth status` command | 🟢 Medium | Show which providers are authenticated, auth mode, account ID, token expiry. | ⏳ |
 
 ### Phase 3: Pi-Compatible Model Catalog
 
@@ -195,20 +197,22 @@ OpenAI-compatible provider CLI from its xAI-grok fork origins.
 
 ---
 
-## Immediate Next Steps (Post-PR #4)
+## Immediate Next Steps (Post-PR #6)
 
-These are the concrete tasks for the current branch `feat/wire-credentials-to-callers`:
+These are the concrete tasks for the current branch `feat/phases-2-5-oauth-credential-store`:
 
-✅ ~~1. [P0.1] Map the sampler → HTTP client path~~ → Done: `PHASE0_AUDIT.md`
-✅ ~~2. [P0.2] Map config loading~~ → Done: `PHASE0_AUDIT.md`
-✅ ~~3. [P0.5] Design and document the `config.toml` provider schema~~ → Done: `ROADMAP.md` § Config Schema Target
-✅ ~~4. [P1.1] Add `--provider` CLI flag~~ → Done: PR #3
-✅ ~~5. [P1.2] Load `ProviderRegistry` from `config.toml`~~ → Done: PR #4
-✅ ~~6. [P1.3] Wire provider into credential resolution~~ → Done: PR #4
+✅ ~~1. [P2.1] CredentialStore trait + FileCredentialStore~~ → Done: PR #6
+✅ ~~2. [P2.2] Credential enum (ApiKey + OAuth)~~ → Done: PR #6
+✅ ~~3. [P2.3] Browser-based OAuth PKCE flow~~ → Done: PR #6
+✅ ~~4. [P2.5] Token resolution from credential store~~ → Done: PR #6
+✅ ~~5. [P2.6] ghost login <provider> command~~ → Done: PR #6
+✅ ~~6. Multi-provider test (DeepSeek + Z.AI)~~ → Done: PR #6
 
-⏳ **Next**: End-to-end integration test — `ghost --provider openai --api-key sk-xxx` → actual OpenAI endpoint
+⏳ **Next**: Address PR #6 review feedback
+⏳ **[P2.4]** Device-code OAuth flow (headless)
+⏳ **[P2.7]** `ghost logout <provider>` command
+⏳ **[P2.8]** `ghost auth status` command
 ⏳ **[P1.8]** Runtime `/provider` slash command in TUI
-⏳ **[P2.1]** OAuth login flow (`ghost login <provider> --oauth`)
 
 ---
 

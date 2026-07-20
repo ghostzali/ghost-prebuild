@@ -35,6 +35,7 @@ struct TokenResponse {
     #[serde(default)]
     expires_in: Option<u64>,
     #[serde(default)]
+    #[allow(dead_code)]
     token_type: Option<String>,
 }
 
@@ -141,7 +142,7 @@ async fn receive_callback(listener: TcpListener, expected_state: &str, _redirect
 
     tokio::spawn(async move {
         // Use blocking accept in a spawn_blocking since TcpListener is not async
-        let stream = match listener.accept() {
+        match listener.accept() {
             Ok((mut stream, _)) => {
                 use std::io::{BufRead, BufReader, Write};
                 let mut reader = BufReader::new(&mut stream);
@@ -173,16 +174,16 @@ async fn receive_callback(listener: TcpListener, expected_state: &str, _redirect
                             .find(|(k, _)| k == "code")
                             .map(|(_, v)| url_decode(v));
 
-                        if received_state.as_deref() == Some(&state) {
-                            if let Some(c) = code {
-                                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
-                                    <html><body><h1>✅ Login successful!</h1>\
-                                    <p>You may close this window and return to the terminal.</p>\
-                                    </body></html>";
-                                let _ = stream.write_all(response.as_bytes());
-                                let _ = code_sender.send(c);
-                                return;
-                            }
+                        if received_state.as_deref() == Some(&state)
+                            && let Some(c) = code
+                        {
+                            let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
+                                <html><body><h1>✅ Login successful!</h1>\
+                                <p>You may close this window and return to the terminal.</p>\
+                                </body></html>";
+                            let _ = stream.write_all(response.as_bytes());
+                            let _ = code_sender.send(c);
+                            return;
                         }
                     }
                 }

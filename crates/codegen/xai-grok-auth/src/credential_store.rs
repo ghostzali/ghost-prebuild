@@ -37,39 +37,39 @@ pub enum Credential {
 impl Credential {
     /// Whether this credential is (likely) still valid.
     /// OAuth credentials check expiry; API keys are always considered valid.
+    #[allow(clippy::collapsible_match)]
     pub fn is_valid(&self) -> bool {
         match self {
             Credential::ApiKey { .. } => true,
-            Credential::OAuth { expires_at, .. } => {
-                if let Some(exp) = expires_at {
+            Credential::OAuth { expires_at, .. } => match expires_at {
+                Some(exp) => {
                     let now = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_secs();
                     now < *exp
-                } else {
-                    true // no expiry → assume valid
                 }
-            }
+                None => true,
+            },
         }
     }
 
     /// Whether this is an OAuth credential that needs refresh (expired or near expiry).
     /// Returns true if expires_at is within 5 minutes of now.
+    #[allow(clippy::collapsible_match)]
     pub fn needs_refresh(&self) -> bool {
         match self {
-            Credential::OAuth { expires_at, .. } => {
-                if let Some(exp) = expires_at {
+            Credential::OAuth { expires_at, .. } => match expires_at {
+                Some(exp) => {
                     let now = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_secs();
                     // Refresh if expiring within 5 minutes
                     now + 300 >= *exp
-                } else {
-                    false
                 }
-            }
+                None => false,
+            },
             _ => false,
         }
     }
