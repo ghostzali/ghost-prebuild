@@ -87,6 +87,7 @@ fn auth_label(mode: &Option<ProviderAuthMode>) -> &str {
         None => "API key",
         Some(ProviderAuthMode::ApiKey) => "API key",
         Some(ProviderAuthMode::Codex) => "Codex",
+        Some(ProviderAuthMode::OAuth) => "OAuth",
     }
 }
 

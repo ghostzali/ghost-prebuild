@@ -21,6 +21,8 @@ pub enum Command {
     Logout,
     /// Sign in to Grok
     Login {
+        /// Provider to log into (e.g. "openai", "anthropic").
+        provider: Option<String>,
         /// Ignored (kept for backwards compatibility). OAuth2 is now the only auth method.
         #[arg(long, hide = true)]
         legacy: bool,
@@ -34,6 +36,9 @@ pub enum Command {
             conflicts_with_all = ["oauth"]
         )]
         device_auth: bool,
+        /// Provide an API key directly (ghost login openai --api-key sk-xxx).
+        #[arg(long = "api-key", value_name = "KEY")]
+        api_key: Option<String>,
         /// Authenticate for remote development environments (hidden).
         ///
         /// Field is always present so match arms stay feature-unification-safe

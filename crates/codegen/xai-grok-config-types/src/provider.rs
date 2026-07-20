@@ -26,6 +26,40 @@ pub enum ProviderAuthMode {
     ApiKey,
     /// Read OAuth access token from `~/.codex/auth.json` (ChatGPT subscription).
     Codex,
+    /// OAuth 2.0 PKCE flow with authorization code grant.
+    /// Provider must have `oauth` config with authorize_url, token_url, etc.
+    OAuth,
+}
+
+/// OAuth 2.0 configuration for a provider.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct OAuthConfig {
+    /// Authorization endpoint URL.
+    /// Example: "https://auth.openai.com/authorize"
+    pub authorize_url: String,
+
+    /// Token endpoint URL.
+    /// Example: "https://auth.openai.com/oauth/token"
+    pub token_url: String,
+
+    /// OAuth client ID (public client, no secret for desktop PKCE flow).
+    pub client_id: String,
+
+    /// Space-separated OAuth scopes.
+    /// Example: "openai.models.read openai.models.use"
+    #[serde(default)]
+    pub scopes: Option<String>,
+
+    /// Redirect URI for the OAuth callback.
+    /// Defaults to "http://localhost:PORT/callback" (loopback with random port).
+    /// NOTE: Some providers require pre-registered redirect URIs and won't
+    /// accept a random port. For those, use device-code flow instead.
+    #[serde(default)]
+    pub redirect_uri: Option<String>,
+
+    /// Label shown during login, e.g. "OpenAI (ChatGPT Plus/Pro)".
+    #[serde(default)]
+    pub login_label: Option<String>,
 }
 
 /// A configured API provider with its own base URL, auth, and model list.
@@ -55,8 +89,13 @@ pub struct ProviderConfig {
     /// Auth mode for this provider.
     /// - `None` or `ProviderAuthMode::ApiKey`: standard API key flow.
     /// - `ProviderAuthMode::Codex`: read OAuth token from `~/.codex/auth.json`.
+    /// - `ProviderAuthMode::OAuth`: OAuth 2.0 PKCE flow using the `oauth` config.
     #[serde(default)]
     pub auth_mode: Option<ProviderAuthMode>,
+
+    /// OAuth 2.0 configuration (required when `auth_mode = "oauth"`).
+    #[serde(default)]
+    pub oauth: Option<OAuthConfig>,
 
     /// List of model IDs available from this provider.
     #[serde(default)]
@@ -76,6 +115,7 @@ impl ProviderConfig {
             api_key: None,
             env_key: None,
             auth_mode: None,
+            oauth: None,
             models: Vec::new(),
             headers: Vec::new(),
         }
@@ -89,6 +129,11 @@ impl ProviderConfig {
         // Codex auth mode — delegate to codex auth file
         if self.auth_mode == Some(ProviderAuthMode::Codex) {
             return resolve_codex_auth();
+        }
+
+        // OAuth auth mode — read from credential store
+        if self.auth_mode == Some(ProviderAuthMode::OAuth) {
+            return resolve_oauth_credential(&self.name);
         }
 
         // Check the api_key field with ${ENV_VAR} substitution
@@ -154,12 +199,15 @@ impl ProviderConfig {
         // Codex auth mode — check file existence
         if self.auth_mode == Some(ProviderAuthMode::Codex) {
             let auth_path = codex_home_path().join("auth.json");
-            if auth_path.exists() {
-                // File exists; resolve_codex_auth() would also validate JSON,
-                // but for a listing command file presence is sufficient signal.
-                return true;
-            }
-            return false;
+            return auth_path.exists();
+        }
+
+        // OAuth auth mode — check credential store for valid token
+        if self.auth_mode == Some(ProviderAuthMode::OAuth) {
+            // Deferred to credential store: check ~/.ghost/credentials.json
+            // for this provider's OAuth token. For now, OAuth providers
+            // are considered "unresolved" until login is completed.
+            return check_oauth_store(&self.name);
         }
 
         // Check api_key with env var substitution
@@ -269,7 +317,7 @@ fn resolve_codex_auth() -> Option<String> {
 }
 
 /// Resolve the Codex home directory.
-fn codex_home_path() -> std::path::PathBuf {
+pub fn codex_home_path() -> std::path::PathBuf {
     // CODEX_HOME env var, or ~/.codex
     if let Ok(home) = std::env::var("CODEX_HOME") {
         return std::path::PathBuf::from(home);
@@ -279,6 +327,65 @@ fn codex_home_path() -> std::path::PathBuf {
         .or_else(|| std::env::var("HOME").ok().map(std::path::PathBuf::from))
         .unwrap_or_else(|| std::path::PathBuf::from("."));
     home.join(".codex")
+}
+
+/// Check if an OAuth credential exists for this provider.
+/// Reads `~/.ghost/credentials.json` and looks for an OAuth entry.
+///
+/// NOTE: Called per-provider on every `ghost providers` invocation.
+/// Perf: acceptable for expected handful of providers; if the list grows,
+/// batch reads into a single file-load to avoid repeated I/O.
+fn check_oauth_store(provider_name: &str) -> bool {
+    resolve_oauth_credential_inner(provider_name).is_some()
+}
+
+/// Resolve an OAuth access token from the credential store.
+fn resolve_oauth_credential(provider_name: &str) -> Option<String> {
+    resolve_oauth_credential_inner(provider_name)
+}
+
+fn resolve_oauth_credential_inner(provider_name: &str) -> Option<String> {
+    let ghost_home = std::env::var("GHOST_HOME")
+        .ok()
+        .or_else(|| std::env::var("GROK_HOME").ok())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            // Cross-platform home directory fallback
+            #[cfg(windows)]
+            { std::env::var("USERPROFILE").ok().map(std::path::PathBuf::from).unwrap_or_default().join(".ghost") }
+            #[cfg(not(windows))]
+            { std::env::var("HOME").ok().map(std::path::PathBuf::from).unwrap_or_default().join(".ghost") }
+        });
+    let creds_path = ghost_home.join("credentials.json");
+    if let Ok(data) = std::fs::read_to_string(&creds_path)
+        && let Ok(json) = serde_json::from_str::<serde_json::Value>(&data)
+        && let Some(providers) = json.as_object()
+        && let Some(entry) = providers.get(provider_name)
+        && let Some(auth_type) = entry.get("type").and_then(|v| v.as_str())
+    {
+        if auth_type == "oauth" {
+            // Check expiry
+            if let Some(expires) = entry.get("expires_at").and_then(|v| v.as_u64()) {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                if now >= expires {
+                    tracing::warn!(
+                        "Provider '{}': OAuth token expired. Run 'ghost login {} --oauth' to refresh.",
+                        provider_name, provider_name
+                    );
+                    return None;
+                }
+            }
+            // Return access token
+            return entry.get("access_token").and_then(|v| v.as_str().map(|s| s.to_string()));
+        }
+        if auth_type == "api_key" {
+            return entry.get("key").and_then(|v| v.as_str().map(|s| s.to_string()));
+        }
+    }
+    None
 }
 
 /// A key-value pair for custom HTTP headers.
@@ -367,6 +474,7 @@ impl ProviderRegistry {
                 api_key: None,
                 env_key: None,
                 auth_mode: Some(ProviderAuthMode::Codex),
+                oauth: None,
                 models: CODEX_DEFAULT_MODELS.iter().map(|s| s.to_string()).collect(),
                 headers: Vec::new(),
             });
@@ -591,5 +699,45 @@ mod tests {
             provider.resolve_api_base(),
             Some("https://api.openai.com/v1".into())
         );
+    }
+
+    /// Integration test: multiple providers with different API keys.
+    /// Uses DeepSeek and Z.AI — validates each resolves its own key independently.
+    #[test]
+    #[serial_test::serial]
+    fn test_multi_provider_key_resolution() {
+        // SAFETY: serialized test; no concurrent env mutation.
+        unsafe {
+            std::env::set_var("DEEPSEEK_API_KEY", "sk-deepseek-test-key-123");
+            std::env::set_var("ZAI_API_KEY", "zai-test-token-456");
+        }
+
+        let deepseek = ProviderConfig {
+            name: "deepseek".into(),
+            api_base: Some("https://api.deepseek.com/v1".into()),
+            env_key: Some("DEEPSEEK_API_KEY".into()),
+            ..ProviderConfig::named("deepseek")
+        };
+        let zai = ProviderConfig {
+            name: "zai".into(),
+            api_base: Some("https://api.z.ai/v1".into()),
+            env_key: Some("ZAI_API_KEY".into()),
+            ..ProviderConfig::named("zai")
+        };
+
+        // Each provider resolves its own key
+        assert!(deepseek.has_resolvable_key());
+        assert_eq!(
+            deepseek.resolve_api_key(),
+            Some("sk-deepseek-test-key-123".into())
+        );
+        assert!(zai.has_resolvable_key());
+        assert_eq!(zai.resolve_api_key(), Some("zai-test-token-456".into()));
+
+        // Cleanup
+        unsafe {
+            std::env::remove_var("DEEPSEEK_API_KEY");
+            std::env::remove_var("ZAI_API_KEY");
+        }
     }
 }

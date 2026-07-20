@@ -3,18 +3,27 @@ license = "Apache-2.0"
 name = "xai-grok-auth"
 version = "0.1.0"
 edition.workspace = true
-description = "Auth dependency-inversion seam: HttpAuth + AuthCredentialProvider traits"
+description = "Auth dependency-inversion seam: HttpAuth + AuthCredentialProvider traits, OAuth PKCE flow, CredentialStore"
 authors = ["xAI"]
 
 [features]
 middleware = ["dep:reqwest-middleware", "dep:http"]
 
 [dependencies]
+anyhow = { workspace = true }
 async-trait = { workspace = true }
+base64 = { workspace = true }
 http = { workspace = true, optional = true }
-reqwest = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true, features = ["time", "net", "io-util", "rt"] }
 tracing = { workspace = true }
+urlencoding = { workspace = true }
+webbrowser = { workspace = true }
 
 [dev-dependencies]
 mockito = { workspace = true }
