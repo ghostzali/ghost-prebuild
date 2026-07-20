@@ -250,4 +250,3 @@ async fn exchange_code(
 
     Ok(token)
 }
-}
