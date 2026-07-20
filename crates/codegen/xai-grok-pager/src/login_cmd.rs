@@ -6,9 +6,9 @@
 //! - `ghost login codex` — use existing Codex CLI auth (reads ~/.codex/auth.json)
 
 use anyhow::{Context, Result};
-use xai_grok_auth::credential_store::{Credential, FileCredentialStore};
+use xai_grok_auth::credential_store::{Credential, CredentialStore, FileCredentialStore};
 use xai_grok_auth::oauth::flow::{login_oauth, OAuthFlowConfig};
-use xai_grok_config_types::provider::{OAuthConfig, ProviderAuthMode, ProviderRegistry};
+use xai_grok_config_types::{OAuthConfig, ProviderAuthMode, ProviderRegistry};
 use xai_grok_shell::agent::config::Config as AgentConfig;
 
 pub async fn login_provider(
