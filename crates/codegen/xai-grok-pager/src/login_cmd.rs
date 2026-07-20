@@ -29,7 +29,7 @@ pub async fn login_provider(
         let credential = Credential::ApiKey {
             key: key.to_string(),
         };
-        store.write(provider_name, credential).await;
+        store.write(provider_name, credential).await?;
         println!("✅ API key stored for provider '{}'.", provider_name);
         return Ok(());
     }
@@ -77,7 +77,7 @@ pub async fn login_provider(
         match std::env::var(env_key) {
             Ok(key) if !key.is_empty() => {
                 let credential = Credential::ApiKey { key };
-                store.write(provider_name, credential).await;
+                store.write(provider_name, credential).await?;
                 println!(
                     "✅ API key from ${} stored for provider '{}'.",
                     env_key, provider_name

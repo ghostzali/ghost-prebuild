@@ -111,7 +111,7 @@ pub async fn login_oauth<Store: CredentialStore + ?Sized>(
         expires_at,
     };
 
-    store.write(&config.provider_id, credential.clone()).await;
+    store.write(&config.provider_id, credential.clone()).await?;
 
     println!("✅ Successfully logged in to {}!", config.provider_name);
     Ok(credential)
