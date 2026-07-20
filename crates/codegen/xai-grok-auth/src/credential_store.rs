@@ -174,11 +174,10 @@ impl FileCredentialStore {
             .or_else(|| std::env::var("GROK_HOME").ok())
             .map(PathBuf::from)
             .unwrap_or_else(|| {
-                std::env::var("HOME")
-                    .ok()
-                    .map(PathBuf::from)
-                    .unwrap_or_default()
-                    .join(".ghost")
+                #[cfg(windows)]
+                { std::env::var("USERPROFILE").ok().map(PathBuf::from).unwrap_or_default().join(".ghost") }
+                #[cfg(not(windows))]
+                { std::env::var("HOME").ok().map(PathBuf::from).unwrap_or_default().join(".ghost") }
             });
         home.join("credentials.json")
     }

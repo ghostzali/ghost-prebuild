@@ -57,11 +57,8 @@ pub async fn login_provider(
 
     if provider.auth_mode == Some(ProviderAuthMode::Codex) {
         // Codex CLI auth — already handled by resolve_codex_auth()
-        // Just verify the auth file exists
-        let auth_path = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".codex")
-            .join("auth.json");
+        // Just verify the auth file exists using the shared codex_home_path()
+        let auth_path = xai_grok_config_types::codex_home_path().join("auth.json");
         if !auth_path.exists() {
             anyhow::bail!(
                 "Codex auth file not found at {}. Run 'codex login' first.",

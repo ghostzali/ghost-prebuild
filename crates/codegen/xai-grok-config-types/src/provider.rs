@@ -51,7 +51,9 @@ pub struct OAuthConfig {
     pub scopes: Option<String>,
 
     /// Redirect URI for the OAuth callback.
-    /// Defaults to "http://localhost:PORT/callback" (loopback).
+    /// Defaults to "http://localhost:PORT/callback" (loopback with random port).
+    /// NOTE: Some providers require pre-registered redirect URIs and won't
+    /// accept a random port. For those, use device-code flow instead.
     #[serde(default)]
     pub redirect_uri: Option<String>,
 
@@ -315,7 +317,7 @@ fn resolve_codex_auth() -> Option<String> {
 }
 
 /// Resolve the Codex home directory.
-fn codex_home_path() -> std::path::PathBuf {
+pub fn codex_home_path() -> std::path::PathBuf {
     // CODEX_HOME env var, or ~/.codex
     if let Ok(home) = std::env::var("CODEX_HOME") {
         return std::path::PathBuf::from(home);
@@ -329,6 +331,10 @@ fn codex_home_path() -> std::path::PathBuf {
 
 /// Check if an OAuth credential exists for this provider.
 /// Reads `~/.ghost/credentials.json` and looks for an OAuth entry.
+///
+/// NOTE: Called per-provider on every `ghost providers` invocation.
+/// Perf: acceptable for expected handful of providers; if the list grows,
+/// batch reads into a single file-load to avoid repeated I/O.
 fn check_oauth_store(provider_name: &str) -> bool {
     resolve_oauth_credential_inner(provider_name).is_some()
 }
@@ -344,11 +350,11 @@ fn resolve_oauth_credential_inner(provider_name: &str) -> Option<String> {
         .or_else(|| std::env::var("GROK_HOME").ok())
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
-            std::env::var("HOME")
-                .ok()
-                .map(std::path::PathBuf::from)
-                .unwrap_or_default()
-                .join(".ghost")
+            // Cross-platform home directory fallback
+            #[cfg(windows)]
+            { std::env::var("USERPROFILE").ok().map(std::path::PathBuf::from).unwrap_or_default().join(".ghost") }
+            #[cfg(not(windows))]
+            { std::env::var("HOME").ok().map(std::path::PathBuf::from).unwrap_or_default().join(".ghost") }
         });
     let creds_path = ghost_home.join("credentials.json");
     if let Ok(data) = std::fs::read_to_string(&creds_path)
