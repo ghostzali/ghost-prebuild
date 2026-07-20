@@ -135,70 +135,97 @@ fn open_browser(url: &str) {
 }
 
 /// Wait for the OAuth callback on the bound TCP listener.
-/// Returns the authorization code on success, or an error on timeout/csrf mismatch.
+/// Loops accepting connections until a state-matching callback arrives
+/// (handles Chrome pre-connect probes) or the 5-minute deadline fires.
 async fn receive_callback(listener: TcpListener, expected_state: &str, _redirect_uri: &str) -> Result<String> {
-    // Accept one connection with a 5-minute timeout
     let (code_sender, code_receiver) = tokio::sync::oneshot::channel::<String>();
     let state = expected_state.to_string();
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(300);
 
+    let listener = std::sync::Arc::new(listener);
     tokio::spawn(async move {
-        // Use blocking accept in a spawn_blocking since TcpListener is not async
-        match listener.accept() {
-            Ok((mut stream, _)) => {
-                use std::io::{BufRead, BufReader, Write};
-                let mut reader = BufReader::new(&mut stream);
-                let mut request_line = String::new();
-                if reader.read_line(&mut request_line).is_ok() {
-                    // Parse the GET request: "GET /callback?code=...&state=... HTTP/1.1"
-                    if let Some(query_start) = request_line.find("?") {
-                        let query_end = request_line[query_start..].find(" HTTP").unwrap_or(request_line.len() - query_start);
-                        let query = &request_line[query_start + 1..query_start + query_end];
+        loop {
+            let remaining = deadline
+                .checked_duration_since(tokio::time::Instant::now())
+                .unwrap_or_default();
+            if remaining.is_zero() {
+                return;
+            }
 
-                        let params: Vec<(String, String)> = query
-                            .split('&')
-                            .filter_map(|pair| {
-                                let mut parts = pair.splitn(2, '=');
-                                Some((
-                                    parts.next()?.to_string(),
-                                    parts.next().unwrap_or("").to_string(),
-                                ))
-                            })
-                            .collect();
+            let l = listener.clone();
+            let accept_result = tokio::time::timeout(remaining, async {
+                tokio::task::spawn_blocking(move || l.accept()).await
+            }).await;
 
-                        // URL-decode the code and state values
-                        let received_state = params
-                            .iter()
-                            .find(|(k, _)| k == "state")
-                            .map(|(_, v)| urlencoding::decode(v).unwrap_or_default().into_owned());
-                        let code = params
-                            .iter()
-                            .find(|(k, _)| k == "code")
-                            .map(|(_, v)| urlencoding::decode(v).unwrap_or_default().into_owned());
-
-                        if received_state.as_deref() == Some(&state)
-                            && let Some(c) = code
-                        {
-                            let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
-                                <html><body><h1>✅ Login successful!</h1>\
-                                <p>You may close this window and return to the terminal.</p>\
-                                </body></html>";
-                            let _ = stream.write_all(response.as_bytes());
-                            let _ = code_sender.send(c);
-                            return;
-                        }
-                    }
+            let mut stream = match accept_result {
+                Ok(Ok(Ok((s, _)))) => s,
+                Ok(Ok(Err(e))) => {
+                    tracing::warn!("OAuth callback accept error: {e}");
+                    continue;
                 }
-                // Error response
-                let response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n\
-                    <html><body><h1>❌ Login failed</h1>\
-                    <p>Invalid callback. Please try again.</p>\
+                _ => return, // timeout or join error
+            };
+
+            use std::io::{BufRead, BufReader, Write};
+            let mut reader = BufReader::new(&mut stream);
+            let mut request_line = String::new();
+            if reader.read_line(&mut request_line).is_err() {
+                continue;
+            }
+
+            // Parse the GET request: "GET /callback?code=...&state=... HTTP/1.1"
+            let query = match request_line.find("?") {
+                Some(qs) => {
+                    let qe = request_line[qs..].find(" HTTP").unwrap_or(request_line.len() - qs);
+                    &request_line[qs + 1..qs + qe]
+                }
+                None => {
+                    let response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n\
+                        <html><body><h1>❌ Bad request</h1></body></html>";
+                    let _ = stream.write_all(response.as_bytes());
+                    continue;
+                }
+            };
+
+            let params: Vec<(String, String)> = query
+                .split('&')
+                .filter_map(|pair| {
+                    let mut parts = pair.splitn(2, '=');
+                    Some((
+                        parts.next()?.to_string(),
+                        parts.next().unwrap_or("").to_string(),
+                    ))
+                })
+                .collect();
+
+            let received_state = params
+                .iter()
+                .find(|(k, _)| k == "state")
+                .map(|(_, v)| urlencoding::decode(v).unwrap_or_default().into_owned());
+            let code = params
+                .iter()
+                .find(|(k, _)| k == "code")
+                .map(|(_, v)| urlencoding::decode(v).unwrap_or_default().into_owned());
+
+            if received_state.as_deref() == Some(&state)
+                && let Some(c) = code
+            {
+                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
+                    <html><body><h1>✅ Login successful!</h1>\
+                    <p>You may close this window and return to the terminal.</p>\
                     </body></html>";
                 let _ = stream.write_all(response.as_bytes());
+                let _ = code_sender.send(c);
+                return;
             }
-            Err(e) => {
-                tracing::error!("Failed to accept OAuth callback: {}", e);
-            }
-        };
+
+            // State mismatch or missing — send error and continue looping
+            let response = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html\r\n\r\n\
+                <html><body><h1>❌ Login failed</h1>\
+                <p>Invalid callback. Please try again.</p>\
+                </body></html>";
+            let _ = stream.write_all(response.as_bytes());
+        }
     });
 
     match tokio::time::timeout(std::time::Duration::from_secs(300), code_receiver).await {

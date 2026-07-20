@@ -119,7 +119,7 @@ Providers can have:
 
 **Goal**: Support `ghost login <provider> --oauth` for subscription-based providers (OpenAI ChatGPT Plus/Pro, Anthropic Claude Pro/Max, GitHub Copilot).
 
-**Status**: 🚧 In progress (PR #6 — P2.1-P2.6 delivered, P2.4 device-code + P2.7-P2.8 pending)
+**Status**: 🚧 In review (PR #6 — P2.1-P2.6 delivered, P2.4 + P2.7-P2.8 pending, security hardening in progress)
 
 | ID | Task | Priority | Detail | Status |
 |----|------|----------|--------|--------|

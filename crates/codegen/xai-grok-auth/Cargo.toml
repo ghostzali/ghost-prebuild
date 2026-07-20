@@ -20,7 +20,7 @@ reqwest-middleware = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-tokio = { workspace = true, features = ["time", "net", "io-util"] }
+tokio = { workspace = true, features = ["time", "net", "io-util", "rt"] }
 tracing = { workspace = true }
 urlencoding = { workspace = true }
 webbrowser = { workspace = true }
