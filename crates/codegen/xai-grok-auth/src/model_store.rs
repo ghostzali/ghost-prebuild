@@ -7,6 +7,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::io::Write;
+use tracing;
 
 /// A stored model entry for a provider.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,11 +67,13 @@ impl FileModelStore {
     }
 
     fn write_all(&self, data: &serde_json::Map<String, serde_json::Value>) {
-        if let Some(parent) = self.path.parent() {
-            let _ = std::fs::create_dir_all(parent);
+        if let Some(parent) = self.path.parent()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            tracing::error!("ModelStore: failed to create dir {:?}: {e}", parent);
+            return;
         }
         let json = serde_json::to_string_pretty(data).unwrap_or_default();
-        // Atomic write: temp file → rename
         let tmp = self.path.with_extension("tmp");
         let mut opts = std::fs::OpenOptions::new();
         opts.write(true).create(true).truncate(true);
@@ -78,10 +82,26 @@ impl FileModelStore {
             use std::os::unix::fs::OpenOptionsExt;
             opts.mode(0o644);
         }
-        if let Ok(mut f) = opts.open(&tmp) {
-            let _ = std::io::Write::write_all(&mut f, json.as_bytes());
-            let _ = f.flush();
-            let _ = std::fs::rename(&tmp, &self.path);
+        let mut f = match opts.open(&tmp) {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::error!("ModelStore: failed to open {:?}: {e}", tmp);
+                return;
+            }
+        };
+        if let Err(e) = f.write_all(json.as_bytes()) {
+            tracing::error!("ModelStore: write_all failed for {:?}: {e}", tmp);
+            let _ = std::fs::remove_file(&tmp);
+            return;
+        }
+        if let Err(e) = f.flush() {
+            tracing::error!("ModelStore: flush failed for {:?}: {e}", tmp);
+            let _ = std::fs::remove_file(&tmp);
+            return;
+        }
+        if let Err(e) = std::fs::rename(&tmp, &self.path) {
+            tracing::error!("ModelStore: rename {:?} → {:?} failed: {e}", tmp, self.path);
+            let _ = std::fs::remove_file(&tmp);
         }
     }
 }

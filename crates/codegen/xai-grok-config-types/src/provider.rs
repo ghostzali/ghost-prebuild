@@ -98,8 +98,28 @@ pub struct ProviderConfig {
     pub oauth: Option<OAuthConfig>,
 
     /// List of model IDs available from this provider.
+    /// When empty, all models from the provider's API are available.
     #[serde(default)]
     pub models: Vec<String>,
+
+    /// Filter models by credential type.
+    /// When true, OAuth-required models are only included when the
+    /// provider has a valid OAuth credential (not API key or env var).
+    #[serde(default)]
+    pub filter_by_credential: bool,
+
+    /// Override context window size for this provider's models (Phase 6.2).
+    /// When set, all models from this provider use this context window
+    /// instead of their individual defaults. Useful for proxies and
+    /// rate-limited tiers.
+    #[serde(default)]
+    pub context_window_override: Option<u64>,
+
+    /// Priority for failover ordering (Phase 6.3). Lower = higher priority.
+    /// When a provider fails, the next highest-priority provider with the
+    /// same model is tried. Default: 0 (no special priority).
+    #[serde(default)]
+    pub priority: u32,
 
     /// Optional: custom HTTP headers to add to all requests to this provider.
     #[serde(default)]
@@ -117,6 +137,9 @@ impl ProviderConfig {
             auth_mode: None,
             oauth: None,
             models: Vec::new(),
+            filter_by_credential: false,
+            context_window_override: None,
+            priority: 0,
             headers: Vec::new(),
         }
     }
@@ -449,6 +472,21 @@ impl ProviderRegistry {
             .or_else(|| self.providers.first())
     }
 
+    /// Find failover providers that support a given model (Phase 6.3).
+    /// Returns providers sorted by priority (lower = higher priority),
+    /// excluding the given provider. Used when a provider fails to
+    /// try the next best alternative.
+    pub fn failover_for(&self, model_id: &str, exclude_provider: &str) -> Vec<&ProviderConfig> {
+        let mut candidates: Vec<&ProviderConfig> = self
+            .providers
+            .iter()
+            .filter(|p| p.name != exclude_provider)
+            .filter(|p| p.models.is_empty() || p.models.iter().any(|m| m == model_id))
+            .collect();
+        candidates.sort_by_key(|p| p.priority);
+        candidates
+    }
+
     /// Auto-register a codex provider if codex auth exists.
     /// Returns true if a codex provider was added.
     ///
@@ -476,6 +514,9 @@ impl ProviderRegistry {
                 auth_mode: Some(ProviderAuthMode::Codex),
                 oauth: None,
                 models: CODEX_DEFAULT_MODELS.iter().map(|s| s.to_string()).collect(),
+                filter_by_credential: false,
+                context_window_override: None,
+                priority: 0,
                 headers: Vec::new(),
             });
             tracing::info!("Auto-registered 'codex' provider from existing Codex CLI auth");

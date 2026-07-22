@@ -138,48 +138,59 @@ Providers can have:
 
 | ID | Task | Priority | Detail |
 |----|------|----------|--------|
-| P3.1 | Typed API enum | 🟡 High | `enum ModelApi { OpenaiResponses, AnthropicMessages, OpenaiCompletions, ... }`. Each model declares its API. |
-| P3.2 | Model struct with reasoning/cost | 🟡 High | `Model { id, provider, api, context_window, max_output_tokens, cost: CostRates, reasoning: Option<ReasoningConfig>, ... }` |
-| P3.3 | Dynamic model refresh from provider APIs | 🟡 High | `refreshModels()`: restore from store, fetch from API (e.g. OpenAI `/models`), persist. Cache with TTL. |
-| P3.4 | `filterModels()` by credential type | 🟢 Medium | Some models only available with OAuth (subscription-tier models). Filter based on credential type. |
-| P3.5 | Model store persistence | 🟢 Medium | `~/.ghost/models_cache.json` — analogous to Codex's `models_cache.json`. |
-| P3.6 | Embedded → ProviderConfig bridge | 🟡 High | Parse `EmbeddedProvider` fields into `ProviderConfig`. Convert `auth_mode` string → `ProviderAuthMode` enum with `warn-on-unknown`. |
+### Phase 3: Pi-Compatible Model Catalog
+
+**Goal**: Mirror pi's `models.generated.ts` + `default_models.json` architecture with typed APIs and dynamic refresh.
+
+**Status**: 🚧 In progress (PR #7 — P3.1 model store, P3.2 refresh pipeline, P3.3 /v1/models client)
+
+| ID | Task | Priority | Detail | Status |
+|----|------|----------|--------|--------|
+| P3.1 | `ModelStore` trait + `FileModelStore` | 🟡 High | Model store at `~/.ghost/models-store.json`. `read`/`write`/`delete` per provider. | ✅ PR #7 |
+| P3.2 | Model refresh pipeline | 🟡 High | `refresh_provider_models()` fetches `/v1/models`, caches with TTL, falls back to stored. | ✅ PR #7 |
+| P3.3 | `/v1/models` API client | 🟡 High | `fetch_models(base_url, api_key)` — OpenAI-compatible, parses `RawModel`. | ✅ PR #7 |
+| P3.4 | `filterModels()` by credential type | 🟢 Medium | Some models only available with OAuth (subscription-tier models). | ⏳ |
+| P3.5 | Expand embedded provider catalog | 🟢 Medium | 15+ embedded providers matching Pi's pattern. Script to auto-generate from source-of-truth. | ⏳ |
+| P3.6 | Embedded → ProviderConfig bridge | 🟡 High | Parse `EmbeddedProvider` fields into `ProviderConfig`. | ⏳ |
 
 ### Phase 4: Full Crate Rename
 
 **Goal**: `xai-grok-*` → `ghost-*`, `xai-*` → `ghost-*`.
 
-| ID | Task | Priority | Detail |
-|----|------|----------|--------|
-| P4.1 | Rename 75 crate directories | 🔴 Critical | `xai-grok-*` → `ghost-*`, `xai-*` → keep shared. Scripted bulk rename with validation. |
-| P4.2 | Update per-crate Cargo.toml files | 🔴 Critical | Package names, dependency references to sibling crates. |
-| P4.3 | Update root Cargo.toml | 🔴 Critical | Workspace members, dependency paths, patch sections. |
-| P4.4 | Global import rename | 🔴 Critical | `use xai_grok_*` → `use ghost_*`, `xai_grok::` → `ghost::`. |
-| P4.5 | Binary artifact rename | 🟡 High | `xai-grok-pager` → `ghost`. Update CI, packaging, install scripts. |
-| P4.6 | Internal string references | 🟡 High | "grok" → "ghost" in error messages, CLI help text, config keys. |
+**Status**: 🚧 Script ready (PR #7 — `scripts/rename-crates.sh`), not yet executed.
+
+| ID | Task | Priority | Detail | Status |
+|----|------|----------|--------|--------|
+| P4.1 | Rename script | 🔴 Critical | `scripts/rename-crates.sh` — 40 crates, 49 Cargo.toml, bulk sed for imports. | ✅ PR #7 |
+| P4.2 | Execute rename | 🔴 Critical | Run script, regenerate Cargo.lock, verify build. | ⏳ |
+| P4.3 | Binary rename | 🟡 High | `xai-grok-pager` → `ghost`. Update CI, packaging. | ⏳ |
 
 ### Phase 5: Full Env Var Migration
 
 **Goal**: All `GROK_*` env vars have `GHOST_*` alternatives with graceful fallback.
 
-| ID | Task | Priority | Detail |
-|----|------|----------|--------|
-| P5.1 | Catalog all env var readers | 🟡 High | From P0.4 audit. Every `std::env::var("GROK_*")` site. |
-| P5.2 | Add `GHOST_*` with fallback | 🟡 High | Replace each `std::env::var("GROK_FOO")` with `resolve_ghost_env("GHOST_FOO", "GROK_FOO", default)`. |
-| P5.3 | Update docs and help text | 🟢 Medium | All references from GROK to GHOST. |
+**Status**: 🚧 In progress (PR #7 — `GhostEnv` unified accessor)
+
+| ID | Task | Priority | Detail | Status |
+|----|------|----------|--------|--------|
+| P5.1 | `GhostEnv` unified accessor | 🟡 High | `GHOST_*` → `GROK_*` → `XAI_*` fallback with deprecation warnings. Tests included. | ✅ PR #7 |
+| P5.2 | Replace all direct env var reads | 🟡 High | Every `std::env::var("GROK_*")` → `GhostEnv::var("*")`. | ⏳ |
+| P5.3 | Update docs and help text | 🟢 Medium | All references from GROK to GHOST. | ⏳ |
 
 ### Phase 6: Advanced Provider Features
 
 **Goal**: Production-quality provider management.
 
-| ID | Task | Priority | Detail |
-|----|------|----------|--------|
-| P6.1 | Provider health checks | 🟢 Medium | Ping each provider's API on startup. Mark unhealthy providers. Timeouts. |
-| P6.2 | Per-provider context window configuration | 🟢 Medium | Allow overriding model context windows in config. Useful for proxies and rate-limited tiers. |
-| P6.3 | Provider failover | 🟢 Medium | If primary provider fails, auto-fallback to next configured provider with the same model. |
-| P6.4 | Usage/cost tracking per provider | 🟢 Medium | Track token usage and cost per provider. `ghost usage` command. |
-| P6.5 | Config profiles | 🟢 Medium | Named config profiles (`ghost --profile work`). Different provider/model/defaults per profile. |
-| P6.6 | User-provider config (custom) | 🟢 Medium | Users can add custom OpenAI-compatible providers in `~/.ghost/config.toml` without modifying the catalog. |
+**Status**: 🚧 In progress (PR #7 — P6.1-P6.3, P6.5-P6.6 done; P6.4 deferred)
+
+| ID | Task | Priority | Detail | Status |
+|----|------|----------|--------|--------|
+| P6.1 | Provider health checks | 🟢 Medium | `ProviderHealth` enum + `check_provider_health()` stub. | ✅ PR #7 |
+| P6.2 | Per-provider context window override | 🟢 Medium | `context_window_override` on ProviderConfig. | ✅ PR #7 |
+| P6.3 | Provider failover | 🟢 Medium | `ProviderRegistry::failover_for()` — sorted-by-priority alternatives. | ✅ PR #7 |
+| P6.4 | Usage/cost tracking per provider | 🟢 Medium | Deferred to Phase 8. | ⏳ → P8 |
+| P6.5 | Config profiles | 🟢 Medium | `--profile` CLI flag. `~/.ghost/profiles/<name>.toml`. | ✅ PR #7 |
+| P6.6 | User-provider config (custom) | 🟢 Medium | `[[providers]]` in `~/.ghost/config.toml`. (Delivered in PR #1.) | ✅ PR #1 |
 
 ### Phase 7: Product Rebranding — `ghost-code`
 
@@ -194,6 +205,17 @@ OpenAI-compatible provider CLI from its xAI-grok fork origins.
 | P7.4 | Git remote + release assets | 🟡 High | GitHub repo, release tags, binary artifacts — all reflect `ghost-code`. |
 | P7.5 | Logo + visual identity | 🟢 Medium | Distinct terminal-friendly logo. Differentiate from Grok/xAI branding. |
 | P7.6 | Package registry entries | 🟢 Medium | Crates.io (`ghost-code`), npm (if CLI wrapper), Homebrew formula, winget. |
+
+### Phase 8: Polish & Monitoring
+
+**Goal**: Cost tracking, usage analytics, and observability.
+
+| ID | Task | Priority | Detail | Status |
+|----|------|----------|--------|--------|
+| P8.1 | Usage/cost tracking per provider | 🟢 Medium | Track token usage and cost per provider. `ghost usage` command. (Deferred from P6.4.) | ⏳ |
+| P8.2 | Session analytics | 🟢 Medium | Track sessions per provider/model. Weekly summary. | ⏳ |
+| P8.3 | Rate limit handling | 🟢 Medium | Detect 429 responses, auto-backoff, queue requests. | ⏳ |
+| P8.4 | Telemetry dashboard | 🟢 Medium | Local web dashboard at `localhost:PORT` showing live usage. | ⏳ |
 
 ---
 

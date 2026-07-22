@@ -14,6 +14,7 @@
 //! see [`validate_requirements`].
 
 pub mod campaigns;
+pub mod ghost_env;
 pub mod config_override;
 pub mod fs_atomic;
 mod loader;

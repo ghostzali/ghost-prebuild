@@ -1,26 +1,18 @@
-# Multi-provider integration test configuration
+# Multi-provider test configuration — ghost-agent
 # 
-# Copy this to ~/.ghost/config.toml and set the env vars to test.
-#
+# Copy to ~/.ghost/config.toml and set the env vars:
 #   export DEEPSEEK_API_KEY="sk-..."
 #   export ZAI_API_KEY="..."
-#   ghost providers
-#   ghost models --provider deepseek
-#   ghost models --provider zai
-#   ghost -m gpt-5.6-sol --provider zai -p "Hello"
+#
+# Test commands:
+#   g0s providers
+#   g0s auth-status
+#   g0s models --provider deepseek
 
 default_provider = "deepseek"
 
-[[providers]]
-name = "deepseek"
-api_base = "https://api.deepseek.com/v1"
-env_key = "DEEPSEEK_API_KEY"
-auth_mode = "api_key"
-models = ["deepseek-chat", "deepseek-reasoner"]
-
-[[providers]]
-name = "zai"
-api_base = "https://api.z.ai/v1"
-env_key = "ZAI_API_KEY"
-auth_mode = "api_key"
-models = ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-4.1"]
+[providers]
+providers = [
+  { name = "deepseek", api_base = "https://api.deepseek.com/v1", env_key = "DEEPSEEK_API_KEY", auth_mode = "api_key", models = ["deepseek-chat", "deepseek-reasoner"] },
+  { name = "zai", api_base = "https://api.z.ai/v1", env_key = "ZAI_API_KEY", auth_mode = "api_key", models = ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-4.1"] }
+]

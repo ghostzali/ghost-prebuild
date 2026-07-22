@@ -28,7 +28,9 @@ pub async fn fetch_models(
     base_url: &str,
     api_key: &str,
 ) -> Result<Vec<RawModel>, Box<dyn std::error::Error + Send + Sync>> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?;
     let url = if base_url.ends_with('/') {
         format!("{}v1/models", base_url)
     } else {

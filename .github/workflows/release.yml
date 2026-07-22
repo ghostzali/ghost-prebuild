@@ -1,0 +1,85 @@
+name: Release — Build Binary
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    name: Build Release Binary
+    runs-on: self-hosted
+    timeout-minutes: 60
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust toolchain
+        run: |
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup default stable 2>/dev/null || true
+          rustup show
+          cargo --version
+          rustc --version
+
+      - name: Install build prerequisites
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo install dotslash --version 0.5.7
+          if ! which protoc >/dev/null 2>&1; then
+            echo "::warning::protoc not found — install protobuf-compiler on the runner"
+          fi
+
+      - name: Build release binary
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo build --release --bin xai-grok-pager
+          strip target/release/xai-grok-pager
+          # Create g0s symlink (binary alias)
+          ln -sf xai-grok-pager target/release/g0s
+          ls -lh target/release/xai-grok-pager target/release/g0s
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/release/xai-grok-pager
+            target/release/g0s
+          name: ghost-agent ${{ github.ref_name }}
+          body: |
+            ## ghost-agent ${{ github.ref_name }}
+
+            Binary name: `g0s` (alias for `ghost-agent`)
+
+            ### Install
+            ```bash
+            curl -L -o g0s https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/g0s
+            chmod +x g0s
+            ./g0s --help
+            ```
+
+            ### What's new
+            See [CHANGELOG.md](./CHANGELOG.md) for details.
+
+            ### Provider setup
+            ```bash
+            mkdir -p ~/.ghost
+            cat > ~/.ghost/config.toml << EOF
+            [[providers]]
+            name = "openai"
+            api_base = "https://api.openai.com/v1"
+            env_key = "OPENAI_API_KEY"
+
+            [[providers]]
+            name = "deepseek"
+            api_base = "https://api.deepseek.com/v1"
+            env_key = "DEEPSEEK_API_KEY"
+            EOF
+            ghost providers
+            ```
+          draft: true
+          generate_release_notes: true

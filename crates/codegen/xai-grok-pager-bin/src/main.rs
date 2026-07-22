@@ -1918,14 +1918,29 @@ async fn async_main() -> Result<()> {
                 println!();
                 xai_grok_shell::instrumentation::finalize_and_exit(0);
             }
-            Command::Logout => {
+            Command::Logout { provider } => {
                 init_tracing_simple("cli");
                 let config = xai_grok_shell::config::load_effective_config_disk_only()
                     .map_err(|e| anyhow::anyhow!("Failed to load config: {e}"))?;
                 let config = AgentConfig::new_from_toml_cfg(&config)
                     .map_err(|e| anyhow::anyhow!("Failed to create agent config: {e}"))?;
+
+                // Multi-provider logout
+                if !config.providers.providers.is_empty() {
+                    return xai_grok_pager::login_cmd::logout_provider(&config, provider.as_deref()).await;
+                }
+
+                // Legacy Grok logout
                 xai_grok_shell::auth::run_cli_logout(&config)?;
                 xai_grok_shell::instrumentation::finalize_and_exit(0);
+            }
+            Command::AuthStatus => {
+                init_tracing_simple("cli");
+                let config = xai_grok_shell::config::load_effective_config_disk_only()
+                    .map_err(|e| anyhow::anyhow!("Failed to load config: {e}"))?;
+                let config = AgentConfig::new_from_toml_cfg(&config)
+                    .map_err(|e| anyhow::anyhow!("Failed to create agent config: {e}"))?;
+                return xai_grok_pager::login_cmd::auth_status(&config).await;
             }
             Command::Wrap(ref wrap_args) => {
                 return xai_grok_pager::wrap_cmd::run(wrap_args);
