@@ -328,13 +328,13 @@ mod tests {
     }
 
     #[test]
-    fn default_grok_home_has_no_verbatim_prefix() {
+    fn default_home_has_no_verbatim_prefix() {
         // On Windows, std::fs::canonicalize returns `\\?\C:\...` verbatim
         // paths that external tools (notably `git clone`) reject. The dunce
         // canonicalization must yield a plain path. No-op assertion on Unix.
-        let home = default_grok_home();
+        let home = default_ghost_home();
         assert!(!home.to_string_lossy().starts_with(r"\\?\"));
-        assert!(home.ends_with(".ghost") || home.ends_with(".grok"));
+        assert!(home.ends_with(".ghost"));
     }
 
     #[test]
