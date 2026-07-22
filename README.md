@@ -3,13 +3,13 @@
 <h1>
   <picture>
     <!-- Logo assets coming soon — PRs welcome! -->
-    <img alt="Ghost Prebuild logo" width="96">
+    <img alt="Ghost Agent logo" width="96">
   </picture>
   <br>
-  Ghost Prebuild (<code>ghost</code>)
+  Ghost Agent (<code>ghost</code>)
 </h1>
 
-**Ghost Prebuild** is a terminal-based AI coding agent, forked from the open-source 
+**Ghost Agent** is a terminal-based AI coding agent, forked from the open-source 
 Grok Build CLI. It runs as a full-screen TUI that understands your codebase, edits files, 
 executes shell commands, searches the web, and manages long-running tasks — interactively,
 headlessly for scripting/CI, or embedded in editors via the Agent Client Protocol (ACP).
@@ -40,8 +40,8 @@ Prebuilt binaries are published for macOS, Linux, and Windows:
 
 ```sh
 # Install scripts coming soon — currently build from source
-# curl -fsSL https://ghost-prebuild.dev/install.sh | bash   # macOS / Linux
-# irm https://ghost-prebuild.dev/install.ps1 | iex          # Windows PowerShell
+# curl -fsSL https://ghost-agent.dev/install.sh | bash   # macOS / Linux
+# irm https://ghost-agent.dev/install.ps1 | iex          # Windows PowerShell
 ```
 
 ## Building from source
@@ -75,7 +75,7 @@ The binary artifact is named `xai-grok-pager`; official installs ship it as
 
 ## Multi-Provider Setup
 
-Ghost Prebuild supports multiple OpenAI-compatible API providers simultaneously. 
+Ghost Agent supports multiple OpenAI-compatible API providers simultaneously. 
 Configure them in `~/.ghost/config.toml`:
 
 ```toml
@@ -109,9 +109,9 @@ models = ["llama3.3:70b", "qwen3:32b", "codestral:22b"]
 
 **Codex subscription (zero-config):**
 If you already have [Codex CLI](https://github.com/openai/codex) installed and logged in,
-Ghost Prebuild auto-detects your ChatGPT subscription and makes it available as the `codex` provider.
+Ghost Agent auto-detects your ChatGPT subscription and makes it available as the `codex` provider.
 
-> **Note on token expiry**: Codex OAuth access tokens are short-lived (~1 hour). Ghost Prebuild
+> **Note on token expiry**: Codex OAuth access tokens are short-lived (~1 hour). Ghost Agent
 > reads the token fresh from `~/.codex/auth.json` on each request; the Codex CLI background
 > process refreshes this file periodically. If you get 401 errors, run `codex login` to force
 > a token refresh, then restart ghost.
@@ -140,7 +140,7 @@ export GHOST_PROVIDER_OPENAI_API_KEY="sk-..."
 export GHOST_PROVIDER_XAI_API_KEY="..."
 ```
 
-Ghost Prebuild also maintains backward compatibility with the `GROK_*` and 
+Ghost Agent also maintains backward compatibility with the `GROK_*` and 
 `XAI_*` environment variables from Grok Build, but `GHOST_*` variables take 
 precedence.
 

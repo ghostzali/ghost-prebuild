@@ -95,3 +95,89 @@ pub async fn login_provider(
         provider_name
     );
 }
+
+/// Log out from a provider by removing its stored credential.
+pub async fn logout_provider(agent_config: &AgentConfig, provider_name: Option<&str>) -> Result<()> {
+    let store = FileCredentialStore::new(FileCredentialStore::default_path());
+
+    match provider_name {
+        Some(name) => {
+            // Verify provider exists
+            agent_config
+                .providers
+                .find(name)
+                .with_context(|| format!("Provider '{}' not found in configured providers", name))?;
+            store.delete(name).await?;
+            println!("✅ Logged out from '{}'.", name);
+        }
+        None => {
+            // Logout all providers
+            let count = agent_config.providers.providers.len();
+            for p in &agent_config.providers.providers {
+                store.delete(&p.name).await?;
+            }
+            println!("✅ Logged out from {} provider(s).", count);
+        }
+    }
+    Ok(())
+}
+
+/// Show authentication status for all configured providers.
+pub async fn auth_status(agent_config: &AgentConfig) -> Result<()> {
+    let store = FileCredentialStore::new(FileCredentialStore::default_path());
+
+    if agent_config.providers.providers.is_empty() {
+        println!("No providers configured.");
+        println!("Add providers to ~/.ghost/config.toml with [[providers]] sections.");
+        return Ok(());
+    }
+
+    println!("Provider authentication status:");
+    println!();
+    println!("  {:<20} {:<12} {}", "PROVIDER", "AUTH", "DETAILS");
+    println!("  {:-<20} {:-<12} {:-<40}", "", "", "");
+
+    for p in &agent_config.providers.providers {
+        let credential = store.read(&p.name).await?;
+        let (status, details) = match credential {
+            Some(Credential::ApiKey { ref key }) => {
+                let masked = if key.len() > 12 {
+                    format!("{}...{}", &key[..4], &key[key.len()-4..])
+                } else if key.len() > 4 {
+                    format!("{}...", &key[..4])
+                } else {
+                    "***".to_string()
+                };
+                ("✓ API key", masked)
+            }
+            Some(Credential::OAuth { ref access_token, expires_at, .. }) => {
+                let expiry_str = expires_at.map_or("unknown".to_string(), |exp| {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    if now < exp {
+                        let remaining = (exp - now) / 3600;
+                        format!("valid ({}h remaining)", remaining)
+                    } else {
+                        "expired".to_string()
+                    }
+                });
+                ("✓ OAuth", expiry_str)
+            }
+            None => {
+                // Check env var fallback
+                if p.has_resolvable_key() {
+                    ("✓ env var", format!("via {}", p.env_key.as_deref().unwrap_or("unknown")))
+                } else {
+                    ("✗ not set", String::new())
+                }
+            }
+        };
+        println!("  {:<20} {:<12} {}", p.name, status, details);
+    }
+
+    println!();
+    println!("Use 'ghost login <provider> --api-key <key>' or '--oauth' to authenticate.");
+    Ok(())
+}

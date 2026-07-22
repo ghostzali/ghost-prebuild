@@ -17,8 +17,14 @@ pub enum Command {
     },
     /// Manage running leader processes
     Leader(LeaderMgmtArgs),
-    /// Sign out and clear cached credentials
-    Logout,
+    /// Sign out and clear cached credentials.
+    /// Provider name is required when multiple providers are configured.
+    Logout {
+        /// Provider to log out from (e.g. "openai").
+        provider: Option<String>,
+    },
+    /// Show authentication status for configured providers
+    AuthStatus,
     /// Sign in to Grok
     Login {
         /// Provider to log into (e.g. "openai", "anthropic").
@@ -53,7 +59,8 @@ pub enum Command {
     Plugin(crate::plugin_cmd::PluginArgs),
     /// Manage cross-session memory
     Memory(crate::memory_cmd::MemoryArgs),
-    /// List configured providers and exit
+    /// List all configured providers and their auth status.
+    /// This command is specific to ghost-code and shows multi-provider information.
     Providers {
         /// Emit machine-readable JSON output.
         #[arg(long)]
@@ -551,6 +558,10 @@ pub struct PagerArgs {
     /// API key override for the selected provider
     #[clap(long = "api-key", value_name = "KEY")]
     pub api_key: Option<String>,
+    /// Config profile to use (Phase 6.5).
+    /// Loads ~/.ghost/profiles/<name>.toml merged with config.toml.
+    #[clap(long = "profile", value_name = "NAME")]
+    pub profile: Option<String>,
     /// Reasoning effort for reasoning models
     #[clap(
         long = "reasoning-effort",
@@ -1192,7 +1203,7 @@ mod tests {
     #[test]
     fn subcommand_takes_precedence_over_positional_prompt() {
         let args = PagerArgs::try_parse_from(["grok", "logout"]).expect("subcommand parses");
-        assert!(matches!(args.command, Some(Command::Logout)));
+        assert!(matches!(args.command, Some(Command::Logout { .. })));
         assert!(args.prompt.is_none());
     }
     #[test]

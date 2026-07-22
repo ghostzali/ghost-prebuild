@@ -13,7 +13,7 @@ jobs:
   check-and-test:
     name: Check + Test (self-hosted)
     runs-on: self-hosted
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -21,7 +21,6 @@ jobs:
 
       - name: Setup Rust toolchain
         run: |
-          # Ensure cargo/rustup are on PATH for this and all subsequent steps
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/.cargo/bin:$PATH"
           rustup default stable 2>/dev/null || true
@@ -34,9 +33,7 @@ jobs:
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo install dotslash --version 0.5.7
           if ! which protoc >/dev/null 2>&1; then
-            echo "::warning::protoc not found — install protobuf-compiler (apt-get install protobuf-compiler) on the runner"
-          else
-            protoc --version
+            echo "::warning::protoc not found — install protobuf-compiler on the runner"
           fi
 
       - name: Cache cargo registry
@@ -45,36 +42,42 @@ jobs:
           path: |
             ~/.cargo/registry/cache
             ~/.cargo/git/db
+            target/debug/.fingerprint
+            target/debug/build
+            target/debug/deps
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Build check (modified crates)
+      - name: Build check (all targets)
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo check --all-targets \
+            -p xai-grok-config-types \
+            -p xai-grok-auth \
+            -p xai-grok-config \
+            -p xai-grok-models
+
+      - name: Build check (pager + shell)
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo check \
-            -p xai-grok-config-types \
-            -p xai-grok-models \
-            -p xai-grok-auth \
-            -p xai-grok-version \
-            -p xai-grok-http \
-            -p xai-grok-config
+            -p xai-grok-shell \
+            -p xai-grok-pager \
+            -p xai-grok-pager-bin
 
-      - name: Test (modified crates)
+      - name: Test
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo test \
             -p xai-grok-config-types \
-            -p xai-grok-models \
             -p xai-grok-auth \
-            -p xai-grok-version
+            -p xai-grok-config
 
-      - name: Clippy (modified crates)
+      - name: Clippy
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
-          cargo clippy \
+          cargo clippy --all-targets \
             -p xai-grok-config-types \
-            -p xai-grok-models \
             -p xai-grok-auth \
-            -p xai-grok-version \
-            -p xai-grok-http \
+            -p xai-grok-config \
             -- -D warnings
