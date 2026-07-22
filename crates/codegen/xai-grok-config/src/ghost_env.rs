@@ -4,7 +4,6 @@
 //! with deprecation warnings when GROK_* vars are used.
 
 use std::path::PathBuf;
-use std::sync::OnceLock;
 
 /// Ghost env var accessor. Reads GHOST_* first, falls back to GROK_*.
 pub struct GhostEnv;
