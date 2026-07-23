@@ -8,7 +8,7 @@
 use anyhow::{Context, Result};
 use xai_grok_auth::credential_store::{Credential, CredentialStore, FileCredentialStore};
 use xai_grok_auth::oauth::flow::{login_oauth, OAuthFlowConfig};
-use xai_grok_config_types::{OAuthConfig, ProviderAuthMode, ProviderRegistry};
+use xai_grok_config_types::{ProviderAuthMode};
 use xai_grok_shell::agent::config::Config as AgentConfig;
 
 pub async fn login_provider(
@@ -150,7 +150,7 @@ pub async fn auth_status(agent_config: &AgentConfig) -> Result<()> {
                 };
                 ("✓ API key", masked)
             }
-            Some(Credential::OAuth { ref access_token, expires_at, .. }) => {
+            Some(Credential::OAuth { expires_at, .. }) => {
                 let expiry_str = expires_at.map_or("unknown".to_string(), |exp| {
                     let now = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
