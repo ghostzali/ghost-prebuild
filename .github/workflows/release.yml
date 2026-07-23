@@ -17,42 +17,49 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup Rust toolchain
+      - name: Pin Rust toolchain
         run: |
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/.cargo/bin:$PATH"
           rustup default stable 2>/dev/null || true
-          rustup show
-          cargo --version
           rustc --version
+          cargo --version
 
       - name: Install build prerequisites
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo install dotslash --version 0.5.7
           if ! which protoc >/dev/null 2>&1; then
-            echo "::warning::protoc not found — install protobuf-compiler on the runner"
+            echo "::warning::protoc not found"
           fi
 
-      - name: Cache cargo registry
+      - name: Cache cargo + target
         uses: actions/cache@v6
         with:
           path: |
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target/release/.fingerprint
-            target/release/build
-            target/release/deps
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
           key: ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-release-
             ${{ runner.os }}-cargo-
 
+      - name: Fast check (fail early)
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo check --all-targets \
+            -p xai-grok-config-types \
+            -p xai-grok-auth \
+            -p xai-grok-config \
+            -p xai-grok-pager \
+            -p xai-grok-shell
+
       - name: Build release binary
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
-          cargo build --release --bin xai-grok-pager
-          strip target/release/xai-grok-pager
+          cargo build --release --bin xai-grok-pager 2>&1 | tee /tmp/release-build.log
+          strip target/release/xai-grok-pager || true
           ln -sf xai-grok-pager target/release/g0s
           ls -lh target/release/xai-grok-pager target/release/g0s
 
