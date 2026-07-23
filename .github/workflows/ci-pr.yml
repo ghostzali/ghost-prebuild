@@ -13,7 +13,7 @@ jobs:
   check-and-test:
     name: Check + Test (self-hosted)
     runs-on: self-hosted
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
