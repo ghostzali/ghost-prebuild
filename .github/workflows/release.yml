@@ -33,16 +33,14 @@ jobs:
             echo "::warning::protoc not found"
           fi
 
-      - name: Cache cargo + target
+      - name: Cache cargo
         uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-release-
             ${{ runner.os }}-cargo-
 
       - name: Fast check (fail early)
@@ -51,9 +49,7 @@ jobs:
           cargo check --all-targets \
             -p xai-grok-config-types \
             -p xai-grok-auth \
-            -p xai-grok-config \
-            -p xai-grok-pager \
-            -p xai-grok-shell
+            -p xai-grok-config
 
       - name: Build release binary
         run: |
