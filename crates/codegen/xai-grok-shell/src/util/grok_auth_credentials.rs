@@ -131,10 +131,7 @@ impl GrokAuthCredentials {
                 creds
             }
             Err(e) => {
-                tracing::warn!(
-                    error = % e,
-                    "resolve_credentials_async: active resolve failed, using cached"
-                );
+                tracing::warn!(error = %e, "resolve_credentials_async: active resolve failed, using cached");
                 self.resolve()
             }
         }
