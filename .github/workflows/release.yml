@@ -85,6 +85,11 @@ jobs:
         with:
           targets: aarch64-apple-darwin
 
+      - name: Install prerequisites
+        run: |
+          brew install protobuf
+          cargo install dotslash --version 0.5.7
+
       - name: Fast check
         run: cargo check -p xai-grok-pager
 
@@ -117,6 +122,11 @@ jobs:
         with:
           targets: x86_64-apple-darwin
 
+      - name: Install prerequisites
+        run: |
+          brew install protobuf
+          cargo install dotslash --version 0.5.7
+
       - name: Fast check
         run: cargo check -p xai-grok-pager
 
@@ -146,6 +156,11 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install prerequisites
+        run: |
+          cargo install dotslash --version 0.5.7
+          # protoc is bundled with the repo via dotslash, just needs to be accessible
 
       - name: Fast check
         run: cargo check -p xai-grok-pager
