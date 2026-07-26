@@ -3,13 +3,14 @@ name: Release — Build Binary
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 jobs:
-  release:
-    name: Build Release Binary
+  # ── Linux x86_64 (self-hosted, fast, cached) ──
+  linux-x86_64:
+    name: Linux x86_64
     runs-on: self-hosted
     timeout-minutes: 360
-
     permissions:
       contents: write
 
@@ -39,43 +40,174 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
+            ${{ runner.os }}-cargo-release-
             ${{ runner.os }}-cargo-
 
       - name: Fast check (fail early)
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
-          cargo check --all-targets \
+          cargo check \
             -p xai-grok-config-types \
             -p xai-grok-auth \
-            -p xai-grok-config
+            -p xai-grok-config \
+            -p xai-grok-pager
 
       - name: Build release binary
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
-          cargo build --release --bin xai-grok-pager 2>&1 | tee /tmp/release-build.log
+          GHOST_VERSION=${{ github.ref_name }} cargo build --release --bin xai-grok-pager
           strip target/release/xai-grok-pager || true
-          ln -sf xai-grok-pager target/release/g0s
-          ls -lh target/release/xai-grok-pager target/release/g0s
+          mv target/release/xai-grok-pager target/release/g0s-linux-x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: g0s-linux-x86_64
+          path: target/release/g0s-linux-x86_64
+
+  # ── macOS Apple Silicon (aarch64) ──
+  macos-aarch64:
+    name: macOS (Apple Silicon)
+    runs-on: macos-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Fast check
+        run: cargo check -p xai-grok-pager
+
+      - name: Build release binary
+        run: |
+          GHOST_VERSION=${{ github.ref_name }} cargo build --release --bin xai-grok-pager
+          strip target/release/xai-grok-pager || true
+          mv target/release/xai-grok-pager target/release/g0s-macos-arm64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: g0s-macos-arm64
+          path: target/release/g0s-macos-arm64
+
+  # ── macOS Intel (x86_64) ──
+  macos-x86_64:
+    name: macOS (Intel)
+    runs-on: macos-13
+    timeout-minutes: 120
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Fast check
+        run: cargo check -p xai-grok-pager
+
+      - name: Build release binary
+        run: |
+          GHOST_VERSION=${{ github.ref_name }} cargo build --release --bin xai-grok-pager
+          strip target/release/xai-grok-pager || true
+          mv target/release/xai-grok-pager target/release/g0s-macos-x86_64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: g0s-macos-x86_64
+          path: target/release/g0s-macos-x86_64
+
+  # ── Windows x86_64 ──
+  windows-x86_64:
+    name: Windows x86_64
+    runs-on: windows-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Fast check
+        run: cargo check -p xai-grok-pager
+
+      - name: Build release binary
+        run: |
+          $env:GHOST_VERSION = "${{ github.ref_name }}"
+          cargo build --release --bin xai-grok-pager
+          Move-Item target/release/xai-grok-pager.exe target/release/g0s-windows-x86_64.exe
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: g0s-windows-x86_64
+          path: target/release/g0s-windows-x86_64.exe
+
+  # ── Create GitHub Release ──
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64]
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -name 'g0s-*' | while read f; do
+            name=$(basename "$f")
+            cp "$f" "release-assets/$name"
+            chmod +x "release-assets/$name" 2>/dev/null || true
+          done
+          ls -lh release-assets/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            target/release/xai-grok-pager
-            target/release/g0s
+          files: release-assets/*
           name: ghost-agent ${{ github.ref_name }}
           body: |
             ## ghost-agent ${{ github.ref_name }}
 
             Binary name: `g0s` (alias for `ghost-agent`)
 
-            ### Install
+            ### Download
+            | Platform | Binary |
+            |----------|--------|
+            | Linux x86_64 | `g0s-linux-x86_64` |
+            | macOS Apple Silicon | `g0s-macos-arm64` |
+            | macOS Intel | `g0s-macos-x86_64` |
+            | Windows x86_64 | `g0s-windows-x86_64.exe` |
+
+            ### Install (Linux/macOS)
             ```bash
-            curl -L -o g0s https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/g0s
-            chmod +x g0s
-            ./g0s --help
+            curl -fsSL https://ghost-agent.dev.zali.pro/install.sh | bash
             ```
 
             ### Provider setup
