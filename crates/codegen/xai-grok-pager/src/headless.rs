@@ -158,6 +158,9 @@ fn parse_prompt_json(json_str: &str) -> anyhow::Result<Vec<acp::ContentBlock>> {
 pub struct HeadlessOptions {
     pub session_id: Option<String>,
     pub resume: Option<String>,
+    /// The composition root pinned (or definitively missed) `resume` before
+    /// the OS sandbox; materialization must not re-run local title selection.
+    pub resume_title_pinned: bool,
     pub cwd: Option<PathBuf>,
     pub yolo: bool,
     pub trust: bool,
@@ -184,10 +187,6 @@ pub struct HeadlessOptions {
     pub permission_mode_flag: Option<String>,
     /// Effort token (`--reasoning-effort` / `--effort`); resolved like `/effort` after models load.
     pub reasoning_effort: Option<String>,
-    /// Append a self-verification loop after the prompt completes.
-    pub self_verify: bool,
-    /// Run the task N ways in parallel and pick the best.
-    pub best_of_n: Option<u32>,
     /// Wait for background tasks (bash, subagent, monitor) to report
     /// `task_completed` before exiting. Default: true. Does not wait for
     /// server-side auto-wake (that runs inside the shell). Use
@@ -587,20 +586,6 @@ fn build_headless_init_request(
         .meta(meta.as_object().cloned())
 }
 
-/// Extract the body of a compiled-in SKILL.md (strip YAML frontmatter).
-fn skill_body(raw: &str) -> &str {
-    let trimmed = raw.trim_start();
-    if !trimmed.starts_with("---") {
-        return trimmed;
-    }
-    if let Some(rest) = trimmed.get(3..)
-        && let Some(end) = rest.find("\n---")
-    {
-        return rest[end + 4..].trim_start();
-    }
-    trimmed
-}
-
 struct OpenedSession {
     session_id: acp::SessionId,
     models: ModelState,
@@ -825,11 +810,20 @@ async fn apply_headless_model_and_effort(
 /// Startup-materialization context for headless (`-p`) runs. Never chat:
 /// `HeadlessOptions` carries no chat flag, so headless resume targets are
 /// always disk/GCS Build sessions.
-fn headless_materialize_ctx(has_worktree: bool) -> crate::app::session_startup::MaterializeCtx {
+fn headless_materialize_ctx(
+    has_worktree: bool,
+    resume_title_pinned: bool,
+) -> crate::app::session_startup::MaterializeCtx {
     crate::app::session_startup::MaterializeCtx {
         has_worktree,
-        allow_remote_restore: false,
+        allow_remote_restore:
+            crate::app::session_startup::MaterializeCtx::default_allow_remote_restore(),
         chat_mode: false,
+        title_resolution: if resume_title_pinned {
+            crate::app::session_startup::TitleResolution::PinnedPreSandbox
+        } else {
+            crate::app::session_startup::TitleResolution::Allowed
+        },
     }
 }
 
@@ -880,7 +874,6 @@ pub async fn run_single_turn(
     agent_config.resolve_runtime_fields(&xai_grok_shell::agent::config::RuntimeResolutionContext {
         raw_config: &raw_config,
         remote_settings: None,
-        cwd: Some(&cwd),
         is_headless: true,
         cli_subagents: None,
         cli_web_search_model: None,
@@ -1009,7 +1002,7 @@ pub async fn run_single_turn(
 
     let cwd_str = cwd.to_string_lossy().to_string();
     let materialized = session_startup::materialize_startup_for_cwd(
-        headless_materialize_ctx(options.worktree.is_some()),
+        headless_materialize_ctx(options.worktree.is_some(), options.resume_title_pinned),
         intent,
         &cwd_str,
     )
@@ -1095,30 +1088,7 @@ pub async fn run_single_turn(
     }
 
     // Send prompt and stream response
-    let mut prompt_blocks = prompt.into_content_blocks();
-
-    // --check / --self-verify: append the check skill AFTER the user prompt
-    // so the model completes the task first, then runs verification.
-    if options.self_verify {
-        prompt_blocks.push(acp::ContentBlock::Text(acp::TextContent::new(
-            skill_body(xai_grok_shell::builtin::CHECK_SKILL_MD).to_string(),
-        )));
-    }
-
-    // --best-of-n N: prefix the user prompt with the compiled-in best-of-n
-    // skill content and the candidate count.
-    if let Some(n) = options.best_of_n {
-        let n = n.clamp(2, 10);
-        {
-            prompt_blocks.insert(
-                0,
-                acp::ContentBlock::Text(acp::TextContent::new(format!(
-                    "{}\n\n## Number of candidates: {n}",
-                    skill_body(xai_grok_shell::builtin::BEST_OF_N_SKILL_MD)
-                ))),
-            );
-        }
-    }
+    let prompt_blocks = prompt.into_content_blocks();
 
     let prompt_meta = {
         let mut meta = serde_json::Map::new();
@@ -1332,7 +1302,10 @@ pub async fn run_single_turn(
         Some(Err(err)) => {
             let msg = if i32::from(err.code) == RATE_LIMITED_ERROR_CODE {
                 let detail = err.data.as_ref().and_then(error_detail_from_data);
-                format_rate_limited_user_message(detail.as_deref(), is_api_key_auth)
+                crate::app::sanitize_user_error(&format_rate_limited_user_message(
+                    detail.as_deref(),
+                    is_api_key_auth,
+                ))
             } else {
                 err.to_string()
             };
@@ -1896,14 +1869,25 @@ mod tests {
     }
 
     /// Headless materialization is never chat, regardless of worktree flag —
-    /// resume targets stay disk/GCS Build sessions.
+    /// resume targets stay disk/GCS Build sessions. The pre-sandbox pin flag
+    /// must carry through so a pinned target is never re-title-selected.
     #[test]
     fn headless_materialize_ctx_stays_non_chat() {
+        use crate::app::session_startup::TitleResolution;
         for has_worktree in [false, true] {
-            let ctx = headless_materialize_ctx(has_worktree);
-            assert!(!ctx.chat_mode);
-            assert!(!ctx.allow_remote_restore);
-            assert_eq!(ctx.has_worktree, has_worktree);
+            for pinned in [false, true] {
+                let ctx = headless_materialize_ctx(has_worktree, pinned);
+                assert!(!ctx.chat_mode);
+                assert_eq!(ctx.has_worktree, has_worktree);
+                assert_eq!(
+                    ctx.title_resolution,
+                    if pinned {
+                        TitleResolution::PinnedPreSandbox
+                    } else {
+                        TitleResolution::Allowed
+                    }
+                );
+            }
         }
     }
 
