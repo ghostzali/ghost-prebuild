@@ -159,8 +159,12 @@ jobs:
 
       - name: Install prerequisites
         run: |
-          cargo install dotslash --version 0.5.7
-          # protoc is bundled with the repo via dotslash, just needs to be accessible
+          # Install protoc from GitHub releases (bin/protoc in repo is Linux binary)
+          $env:PROTOC_VERSION = "29.3"
+          $env:PROTOC_ZIP = "protoc-$env:PROTOC_VERSION-win64.zip"
+          Invoke-WebRequest -Uri "https://github.com/protocolbuffers/protobuf/releases/download/v$env:PROTOC_VERSION/$env:PROTOC_ZIP" -OutFile "$env:TEMP\$env:PROTOC_ZIP"
+          Expand-Archive -Path "$env:TEMP\$env:PROTOC_ZIP" -DestinationPath "$env:TEMP\protoc"
+          echo "$env:TEMP\protoc\bin" >> $env:GITHUB_PATH
 
       - name: Fast check
         run: cargo check -p xai-grok-pager
